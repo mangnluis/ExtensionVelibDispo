@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+  <title>Vélib Advisor</title>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Vélib Advisor</h1>
+    </header>
+    
+    <div class="location-section">
+      <div class="input-group">
+        <label for="current-location">Départ</label>
+        <input type="text" id="current-location" placeholder="Votre position actuelle">
+        <button id="detect-location" title="Détecter ma position">
+          <span class="icon-location"></span>
+        </button>
+      </div>
+      
+      <div class="input-group">
+        <label for="destination">Destination</label>
+        <input type="text" id="destination" placeholder="Où allez-vous?">
+      </div>
+      
+      <button id="analyze-btn" class="primary-btn">Analyser mon trajet</button>
+    </div>
+    
+    <div id="loading" class="hidden">
+      <div class="spinner"></div>
+      <p>Analyse en cours...</p>
+    </div>
+    
+    <div id="result-section" class="hidden">
+      <div id="recommendation">
+        <!-- Affichage de la recommandation OUI/NON -->
+      </div>
+      
+      <div id="stations-list" class="hidden">
+        <h2>Stations recommandées</h2>
+        <div class="stations">
+          <div class="departure-stations">
+            <h3>Au départ</h3>
+            <ul id="departure-stations-list"></ul>
+          </div>
+          
+          <div class="arrival-stations">
+            <h3>À l'arrivée</h3>
+            <ul id="arrival-stations-list"></ul>
+          </div>
+        </div>
+      </div>
+      
+      <div id="alternative-section" class="hidden">
+        <h2>Alternative recommandée</h2>
+        <div id="alternative-content"></div>
+      </div>
+      
+      <button id="new-search" class="secondary-btn">Nouvelle recherche</button>
+    </div>
+    
+    <footer>
+      <p>Données Vélib en temps réel</p>
+    </footer>
+  </div>
+  
+  <script src="../lib/utils.js"></script>
+  <script src="../lib/api.js"></script>
+  <script src="../lib/geo.js"></script>
+  <script src="../lib/decision.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
