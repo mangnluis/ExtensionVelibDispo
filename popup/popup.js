@@ -255,4 +255,55 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
     }
+
+    // Fonction de débogage pour vérifier les stations près d'une adresse
+    function debugCheckStations() {
+      const debugButton = document.createElement('button');
+      debugButton.textContent = '🔍 Vérifier les stations';
+      debugButton.classList.add('secondary-btn');
+      debugButton.style.marginTop = '10px';
+      
+      debugButton.addEventListener('click', function() {
+        const locationInput = currentLocationInput.value;
+        if (!locationInput) {
+          alert("Veuillez entrer une adresse de départ");
+          return;
+        }
+        
+        loadingSection.classList.remove('hidden');
+        
+        getCoordinates(locationInput)
+          .then(coords => {
+            return getNearbyVelibStations(coords, 1500);
+          })
+          .then(stations => {
+            loadingSection.classList.add('hidden');
+            
+            if (!stations || stations.length === 0) {
+              alert("Aucune station trouvée près de cette adresse dans un rayon de 1500m");
+              return;
+            }
+            
+            // Afficher les stations
+            const stationsInfo = stations
+              .map(s => `${s.name}: ${s.bikes} vélos, ${s.docks} places (à ${s.distanceText})`)
+              .join('\n');
+              
+            console.log("Stations trouvées:", stations);
+            alert(`${stations.length} stations trouvées près de ${locationInput}:\n${stationsInfo}`);
+          })
+          .catch(error => {
+            loadingSection.classList.add('hidden');
+            alert(`Erreur: ${error.message}`);
+          });
+      });
+      
+      // Ajouter le bouton en bas de l'interface
+      document.querySelector('footer').insertAdjacentElement('beforebegin', debugButton);
+    }
+
+    // Activer le mode debug en environnement de développement
+    if (location.hostname === 'localhost' || chrome.runtime.id === 'ggpjhpnddgcmbmjhilikiomlfjeecggf') {
+      debugCheckStations();
+    }
 });
