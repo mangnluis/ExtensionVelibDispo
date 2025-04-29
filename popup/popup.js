@@ -283,6 +283,44 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Afficher la section des résultats
       resultSection.classList.remove('hidden');
+      
+      // Ajout d'un lien pour voir toutes les stations trouvées dans la console
+      if (result.allDepartureStations && result.allDepartureStations.length > 0 ||
+          result.allArrivalStations && result.allArrivalStations.length > 0) {
+        
+        const showAllStationsLink = document.createElement('a');
+        showAllStationsLink.href = "#";
+        showAllStationsLink.className = "show-all-stations";
+        showAllStationsLink.textContent = "Voir toutes les stations trouvées";
+        showAllStationsLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          console.log("Toutes les stations de départ trouvées:", result.allDepartureStations || []);
+          console.log("Toutes les stations d'arrivée trouvées:", result.allArrivalStations || []);
+          
+          // Réordonner les stations par distance
+          const allDepartureByDistance = [...(result.allDepartureStations || [])].sort((a, b) => a.distance - b.distance);
+          const allArrivalByDistance = [...(result.allArrivalStations || [])].sort((a, b) => a.distance - b.distance);
+          
+          // Afficher les 10 plus proches
+          console.table(allDepartureByDistance.slice(0, 10).map(s => ({
+            nom: s.name,
+            distance: s.distanceText,
+            temps: s.durationText,
+            vélos: s.bikes
+          })));
+          
+          console.table(allArrivalByDistance.slice(0, 10).map(s => ({
+            nom: s.name,
+            distance: s.distanceText,
+            temps: s.durationText,
+            places: s.docks
+          })));
+          
+          alert("Liste complète des stations affichée dans la console (F12)");
+        });
+        
+        stationsList.appendChild(showAllStationsLink);
+      }
     }
 
     // Utilitaire pour déterminer la classe CSS selon la disponibilité
