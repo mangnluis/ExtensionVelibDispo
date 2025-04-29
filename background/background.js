@@ -9,7 +9,8 @@ let apiCache = {};
 // Écouteur de messages provenant du popup ou d'autres scripts de l'extension
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'getStations') {
-    // Chercher d'abord dans le cache
+    // Commenter la vérification du cache pour forcer les requêtes fraîches
+    /*
     const cacheKey = `stations_${request.lat}_${request.lng}_${request.radius}`;
     
     if (apiCache[cacheKey] && 
@@ -18,8 +19,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({data: apiCache[cacheKey].data});
       return true;
     }
+    */
     
-    // Sinon, faire la requête API
+    // Faire la requête API fraîche
     getNearbyVelibStations({
       lat: request.lat,
       lng: request.lng

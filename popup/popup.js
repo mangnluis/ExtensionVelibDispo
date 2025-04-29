@@ -107,13 +107,16 @@ document.addEventListener('DOMContentLoaded', function() {
       loadingSection.classList.remove('hidden');
       resultSection.classList.add('hidden');
       
-      // Récupérer les coordonnées depuis les adresses
+      // Ajouter un timestamp pour éviter le cache côté API
+      const timestamp = Date.now();
+      
+      // Récupérer les coordonnées depuis les adresses avec le paramètre nocache
       Promise.all([
-        getCoordinates(currentLocationInput.value || 'Ma position').catch(err => {
+        getCoordinates(currentLocationInput.value || 'Ma position', {nocache: timestamp}).catch(err => {
           console.error("Erreur avec l'adresse de départ:", err);
           throw new Error("L'adresse de départ n'a pas pu être localisée. Veuillez la préciser.");
         }),
-        getCoordinates(destinationInput.value).catch(err => {
+        getCoordinates(destinationInput.value, {nocache: timestamp}).catch(err => {
           console.error("Erreur avec l'adresse de destination:", err);
           throw new Error("L'adresse de destination n'a pas pu être localisée. Veuillez la préciser.");
         })
@@ -165,73 +168,121 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Afficher les résultats
     function displayResults(result) {
-      // Affichage de la recommandation principale
-      recommendationDiv.innerHTML = `
-        <div class="result-${result.recommendation ? 'yes' : 'no'}">
-          <p class="decision-text decision-${result.recommendation ? 'yes' : 'no'}">
-            ${result.recommendation ? 'OUI' : 'NON'}
-          </p>
-          <p class="decision-details">${result.reason}</p>
-        </div>
-      `;
+      // Cacher le loader
+      loadingSection.classList.add('hidden');  // ✅ Utiliser loadingSection comme défini au début du script
       
-      // Si recommandation positive, afficher les stations
+      // Afficher la recommandation principale
+      let recommendationHTML = '';
       if (result.recommendation) {
+        recommendationHTML = `
+          <div class="result-yes">
+            <p class="decision-text decision-yes">OUI, prenez un Vélib</p>
+            <p class="decision-details">
+              Temps estimé: ${result.duration.velibText}<br>
+              Alternative: ${result.duration.alternativeText}
+            </p>
+          </div>
+        `;
+      } else {
+        recommendationHTML = `
+          <div class="result-no">
+            <p class="decision-text decision-no">NON, évitez le Vélib</p>
+            <p class="decision-details">
+              ${result.reason}<br>
+              ${result.alternative ? 'Alternative: ' + result.alternative.mode + ' (' + result.alternative.durationText + ')' : ''}
+            </p>
+          </div>
+        `;
+      }
+      recommendationDiv.innerHTML = recommendationHTML;  // ✅ Utiliser recommendationDiv comme défini au début
+      
+      // MODIFICATION: Toujours afficher les stations s'il y en a, peu importe la recommandation
+      if ((result.departureStations && result.departureStations.length > 0) || 
+          (result.arrivalStations && result.arrivalStations.length > 0)) {
+        
         // Afficher les stations de départ
         departureStationsList.innerHTML = '';
-        result.departureStations.forEach(station => {
-          const stationItem = document.createElement('li');
-          stationItem.className = 'station-item';
-          stationItem.innerHTML = `
-            <p class="station-name">${station.name}</p>
-            <div class="station-details">
-              <span>${station.distanceText} (${station.durationText})</span>
-              <span class="availability ${getAvailabilityClass(station.bikes)}">
-                ${station.bikes} vélos disponibles
-              </span>
-            </div>
-          `;
-          departureStationsList.appendChild(stationItem);
-        });
         
-        // Afficher la station d'arrivée
+        if (result.departureStations && result.departureStations.length > 0) {
+          result.departureStations.forEach(station => {
+            const stationItem = document.createElement('li');
+            stationItem.className = 'station-item';
+            stationItem.innerHTML = `
+              <p class="station-name">${station.name}</p>
+              <div class="station-details">
+                <span>${station.distanceText} (${station.durationText})</span>
+                <span class="availability ${getAvailabilityClass(station.bikes)}">
+                  ${station.bikes} vélos disponibles
+                </span>
+              </div>
+            `;
+            departureStationsList.appendChild(stationItem);
+          });
+          document.querySelector('.departure-stations').classList.remove('hidden');
+        } else {
+          document.querySelector('.departure-stations').classList.add('hidden');
+        }
+        
+        // Afficher les stations d'arrivée
         arrivalStationsList.innerHTML = '';
-        result.arrivalStations.forEach(station => {
-          const stationItem = document.createElement('li');
-          stationItem.className = 'station-item';
-          stationItem.innerHTML = `
-            <p class="station-name">${station.name}</p>
-            <div class="station-details">
-              <span>${station.distanceText} (${station.durationText})</span>
-              <span class="availability ${getAvailabilityClass(station.docks)}">
-                ${station.docks} places disponibles
-              </span>
-            </div>
-          `;
-          arrivalStationsList.appendChild(stationItem);
-        });
+        
+        if (result.arrivalStations && result.arrivalStations.length > 0) {
+          result.arrivalStations.forEach(station => {
+            const stationItem = document.createElement('li');
+            stationItem.className = 'station-item';
+            stationItem.innerHTML = `
+              <p class="station-name">${station.name}</p>
+              <div class="station-details">
+                <span>${station.distanceText} (${station.durationText})</span>
+                <span class="availability ${getAvailabilityClass(station.docks)}">
+                  ${station.docks} places disponibles
+                </span>
+              </div>
+            `;
+            arrivalStationsList.appendChild(stationItem);
+          });
+          document.querySelector('.arrival-stations').classList.remove('hidden');
+        } else {
+          document.querySelector('.arrival-stations').classList.add('hidden');
+        }
         
         stationsList.classList.remove('hidden');
-        alternativeSection.classList.add('hidden');
       } else {
+        stationsList.classList.add('hidden');
+      }
+      
+      // Afficher l'alternative si nécessaire
+      if (!result.recommendation) {
         // Afficher les alternatives
         if (result.alternative) {
-          alternativeContent.innerHTML = `
+          let alternativeHTML = `
             <div class="alternative-item">
               <p class="alternative-name">${result.alternative.mode}</p>
               <p class="alternative-detail">
                 Durée estimée: ${result.alternative.durationText}
-              </p>
+              </p>`;
+        
+          // Ajouter les détails sur le temps de marche et d'attente si disponibles
+          if (result.alternative.details) {
+            alternativeHTML += `<p class="alternative-breakdown">${result.alternative.details}</p>`;
+          }
+          
+          alternativeHTML += `
               <p>${result.alternative.description || ''}</p>
             </div>
           `;
+          
+          alternativeContent.innerHTML = alternativeHTML;
           alternativeSection.classList.remove('hidden');
         } else {
           alternativeSection.classList.add('hidden');
         }
-        
-        stationsList.classList.add('hidden');
+      } else {
+        alternativeSection.classList.add('hidden');
       }
+      
+      // Afficher la section des résultats
+      resultSection.classList.remove('hidden');
     }
 
     // Utilitaire pour déterminer la classe CSS selon la disponibilité
