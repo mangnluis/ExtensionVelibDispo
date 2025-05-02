@@ -2,7 +2,7 @@
 
 ## Clé API
 
-La clé API dans le code est une clé publique et gratuite néanmoins avec un grand afflux l'extension peut mal fonctionner si vous remarquer ce problème lors de l'utilisation contactez moi à l'adresse email suivante : louis.mangin.2004@gmail.com
+La clé API dans le code est une clé publique et gratuite néanmoins avec un grand afflux l'extension peut mal fonctionner si vous remarquez ce problème lors de l'utilisation contactez moi à l'adresse email suivante : louis.mangin.2004@gmail.com
 
 ## Présentation
 
