@@ -1,4 +1,7 @@
 ﻿# Vélib Advisor
+
+  Une simple extension pour savoir si le velib vaut le coup ou non !
+ 
 ![icon128](https://github.com/user-attachments/assets/41bd9417-0f1e-48e7-9068-06db55f98604)
 ## Clé API
 
