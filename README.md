@@ -1,5 +1,6 @@
 ﻿# Vélib Advisor
-
+![icon128](https://github.com/user-attachments/assets/41bd9417-0f1e-48e7-9068-06db55f98604)
+(ce logo ne s'affiche pas dans l'extension malgrès les tutoriels, documentations et demandes à l'ia que j'ai faites)
 ## Clé API
 
 La clé API dans le code est une clé publique et gratuite néanmoins avec un grand afflux l'extension peut mal fonctionner si vous remarquez ce problème lors de l'utilisation contactez moi à l'adresse email suivante : louis.mangin.2004@gmail.com
