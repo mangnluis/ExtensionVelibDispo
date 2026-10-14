@@ -16,6 +16,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const alternativeContent = document.getElementById('alternative-content');
     const newSearchBtn = document.getElementById('new-search');
     
+    // Coordonnées déjà connues pour un champ (évite un géocodage supplémentaire)
+    const inputCoords = new WeakMap();
+
+    function setInputCoords(inputElement, coords) {
+      inputCoords.set(inputElement, coords);
+    }
+
+    function getInputCoords(inputElement) {
+      return inputCoords.get(inputElement);
+    }
+
+    function resolveInputCoords(inputElement, fallback) {
+      const coords = getInputCoords(inputElement);
+      if (coords) {
+        return Promise.resolve(coords);
+      }
+      return getCoordinates(inputElement.value || fallback);
+    }
+
     // Création des éléments d'autocomplétion
     const currentLocationSuggestions = createAutocompleteContainer(currentLocationInput);
     const destinationSuggestions = createAutocompleteContainer(destinationInput);
@@ -27,27 +46,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Détection de la position actuelle
     detectLocationBtn.addEventListener('click', function() {
       loadingSection.classList.remove('hidden');
-      
-      navigator.geolocation.getCurrentPosition(
-        function(position) {
-          // Convertir coordonnées en adresse lisible
-          reverseGeocode(position.coords.latitude, position.coords.longitude)
+
+      getCurrentPosition()
+        .then(coords => {
+          // Les coordonnées sont gardées : pas besoin de re-géocoder l'adresse lors de l'analyse
+          currentLocationInput.value = 'Position actuelle';
+          setInputCoords(currentLocationInput, coords);
+          loadingSection.classList.add('hidden');
+
+          // Adresse lisible, uniquement pour l'affichage
+          reverseGeocode(coords.lat, coords.lng)
             .then(address => {
+              if (getInputCoords(currentLocationInput) === coords) {
                 currentLocationInput.value = address;
-                loadingSection.classList.add('hidden');
+              }
             })
-            .catch(error => {
-                console.error('Erreur de géocodage inverse:', error);
-                currentLocationInput.value = 'Position actuelle';
-                loadingSection.classList.add('hidden');
-            });
-        },
-        function(error) {
+            .catch(error => console.error('Erreur de géocodage inverse:', error));
+        })
+        .catch(error => {
           loadingSection.classList.add('hidden');
           alert('Impossible de détecter votre position. Veuillez l\'entrer manuellement.');
           console.error('Erreur de géolocalisation:', error);
-        }
-      );
+        });
     });
 
     // Configuration du bouton de coordonnées
@@ -63,13 +83,14 @@ document.addEventListener('DOMContentLoaded', function() {
     showCoordsBtn.addEventListener('click', function() {
       loadingSection.classList.remove('hidden');
       
-      navigator.geolocation.getCurrentPosition(
-        function(position) {
-          const lat = position.coords.latitude.toFixed(6);
-          const lng = position.coords.longitude.toFixed(6);
-          
+      getCurrentPosition()
+        .then(coords => {
+          const lat = coords.lat.toFixed(6);
+          const lng = coords.lng.toFixed(6);
+
           // Afficher directement les coordonnées
           currentLocationInput.value = `${lat}, ${lng}`;
+          setInputCoords(currentLocationInput, coords);
           loadingSection.classList.add('hidden');
           
           // Optionnel: copier dans le presse-papier
@@ -82,18 +103,12 @@ document.addEventListener('DOMContentLoaded', function() {
               }, 2000);
             })
             .catch(err => console.error('Erreur lors de la copie:', err));
-        },
-        function(error) {
+        })
+        .catch(error => {
           loadingSection.classList.add('hidden');
           alert('Impossible de détecter votre position. Veuillez l\'entrer manuellement.');
           console.error('Erreur de géolocalisation:', error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 5000,
-          maximumAge: 0
-        }
-      );
+        });
     });
 
     // Analyse du trajet
@@ -107,16 +122,13 @@ document.addEventListener('DOMContentLoaded', function() {
       loadingSection.classList.remove('hidden');
       resultSection.classList.add('hidden');
       
-      // Ajouter un timestamp pour éviter le cache côté API
-      const timestamp = Date.now();
-      
-      // Récupérer les coordonnées depuis les adresses avec le paramètre nocache
+      // Réutiliser les coordonnées connues (suggestion choisie, géolocalisation) sinon géocoder
       Promise.all([
-        getCoordinates(currentLocationInput.value || 'Ma position', {nocache: timestamp}).catch(err => {
+        resolveInputCoords(currentLocationInput, 'Ma position').catch(err => {
           console.error("Erreur avec l'adresse de départ:", err);
           throw new Error("L'adresse de départ n'a pas pu être localisée. Veuillez la préciser.");
         }),
-        getCoordinates(destinationInput.value, {nocache: timestamp}).catch(err => {
+        resolveInputCoords(destinationInput).catch(err => {
           console.error("Erreur avec l'adresse de destination:", err);
           throw new Error("L'adresse de destination n'a pas pu être localisée. Veuillez la préciser.");
         })
@@ -188,8 +200,8 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="result-no">
             <p class="decision-text decision-no">NON, évitez le Vélib</p>
             <p class="decision-details">
-              ${result.reason}<br>
-              ${result.alternative ? 'Alternative: ' + result.alternative.mode + ' (' + result.alternative.durationText + ')' : ''}
+              ${escapeHtml(result.reason)}<br>
+              ${result.alternative ? 'Alternative: ' + escapeHtml(result.alternative.mode) + ' (' + result.alternative.durationText + ')' : ''}
             </p>
           </div>
         `;
@@ -208,7 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const stationItem = document.createElement('li');
             stationItem.className = 'station-item';
             stationItem.innerHTML = `
-              <p class="station-name">${station.name}</p>
+              <p class="station-name">${escapeHtml(station.name)}</p>
               <div class="station-details">
                 <span>${station.distanceText} (${station.durationText})</span>
                 <span class="availability ${getAvailabilityClass(station.bikes)}">
@@ -231,7 +243,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const stationItem = document.createElement('li');
             stationItem.className = 'station-item';
             stationItem.innerHTML = `
-              <p class="station-name">${station.name}</p>
+              <p class="station-name">${escapeHtml(station.name)}</p>
               <div class="station-details">
                 <span>${station.distanceText} (${station.durationText})</span>
                 <span class="availability ${getAvailabilityClass(station.docks)}">
@@ -257,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (result.alternative) {
           let alternativeHTML = `
             <div class="alternative-item">
-              <p class="alternative-name">${result.alternative.mode}</p>
+              <p class="alternative-name">${escapeHtml(result.alternative.mode)}</p>
               <p class="alternative-detail">
                 Durée estimée: ${result.alternative.durationText}
               </p>`;
@@ -268,7 +280,7 @@ document.addEventListener('DOMContentLoaded', function() {
           }
           
           alternativeHTML += `
-              <p>${result.alternative.description || ''}</p>
+              <p>${escapeHtml(result.alternative.description)}</p>
             </div>
           `;
           
@@ -285,6 +297,11 @@ document.addEventListener('DOMContentLoaded', function() {
       resultSection.classList.remove('hidden');
       
       // Ajout d'un lien pour voir toutes les stations trouvées dans la console
+      const previousLink = stationsList.querySelector('.show-all-stations');
+      if (previousLink) {
+        previousLink.remove();
+      }
+
       if (result.allDepartureStations && result.allDepartureStations.length > 0 ||
           result.allArrivalStations && result.allArrivalStations.length > 0) {
         
@@ -344,16 +361,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function setupAutocomplete(inputElement, suggestionsContainer) {
+      let pendingSearch = null;
+
       // Debounce pour limiter les requêtes pendant la frappe
       const debouncedSearch = debounce(function(searchText) {
+        // Annuler la recherche précédente : sa réponse n'est plus utile
+        if (pendingSearch) {
+          pendingSearch.abort();
+        }
+
         if (searchText.length < 3) {
           suggestionsContainer.classList.add('hidden');
           return;
         }
-        
+
+        const controller = new AbortController();
+        pendingSearch = controller;
+
         // Rechercher des suggestions d'adresses
-        searchAddresses(searchText)
+        searchAddresses(searchText, controller.signal)
           .then(suggestions => {
+            if (controller.signal.aborted) {
+              return;
+            }
+
             // Vider et remplir le conteneur de suggestions
             suggestionsContainer.innerHTML = '';
             suggestions.forEach(suggestion => {
@@ -363,6 +394,7 @@ document.addEventListener('DOMContentLoaded', function() {
               
               item.addEventListener('click', function() {
                 inputElement.value = suggestion.display_name;
+                setInputCoords(inputElement, { lat: suggestion.lat, lng: suggestion.lng });
                 suggestionsContainer.classList.add('hidden');
               });
               
@@ -378,10 +410,12 @@ document.addEventListener('DOMContentLoaded', function() {
           .catch(error => {
             console.error('Erreur lors de la recherche d\'adresses:', error);
           });
-      }, 300);
-      
+      }, 250);
+
       // Écouter la saisie dans le champ
       inputElement.addEventListener('input', function() {
+        // Le texte a changé : les coordonnées mémorisées ne correspondent plus
+        inputCoords.delete(inputElement);
         debouncedSearch(this.value);
       });
       

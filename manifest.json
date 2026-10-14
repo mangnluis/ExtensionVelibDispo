@@ -5,12 +5,11 @@
     "description": "Décidez rapidement s'il vaut la peine de prendre un Vélib pour votre trajet",
     "permissions": [
       "geolocation",
-      "storage",
-      "alarms"
+      "storage"
     ],
     "host_permissions": [
       "https://opendata.paris.fr/*",
-      "https://nominatim.openstreetmap.org/*",
+      "https://data.geopf.fr/*",
       "https://api.openrouteservice.org/*"
     ],
     "action": {
