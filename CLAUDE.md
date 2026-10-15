@@ -7,7 +7,7 @@ Extension Chrome (Manifest V3, JavaScript vanilla, sans build ni dépendance d'e
 - **Lancer l'extension** : `chrome://extensions` → « Mode développeur » → « Charger l'extension non empaquetée » → racine du dépôt. Après chaque modification : ⟳ sur la carte de l'extension, puis rouvrir la popup.
 - **Déboguer la popup** : clic droit dans la popup → « Inspecter ». La popup se ferme dès qu'elle perd le focus, et son état est perdu.
 - **Tests unitaires** : `npm test` (Node ≥ 20, aucune dépendance : `node:test`, `fetch` simulé par `tests/helpers.js` → `stubFetch`).
-- **Tests de bout en bout** : `npm run test:e2e`. Ils ouvrent la vraie popup dans Chrome headless, avec un réseau simulé par `tests/e2e/fake-api.js`, et prennent ~2 s. Chrome est cherché aux emplacements habituels ; sinon définir `CHROME_PATH`. Les captures d'écran de chaque scénario arrivent dans `tests/e2e/artifacts/` (ignoré par git) : les regarder après toute modification visuelle.
+- **Tests de bout en bout** : `npm run test:e2e`. Ils ouvrent la vraie popup dans Chrome headless, avec un réseau simulé par `tests/e2e/fake-api.js`, et prennent ~20 s (dont 5 s pour le scénario « OpenRouteService trop lent »). Chrome est cherché aux emplacements habituels ; sinon définir `CHROME_PATH`. Les captures d'écran de chaque scénario arrivent dans `tests/e2e/artifacts/` (ignoré par git) : les regarder après toute modification visuelle.
 
 ## Architecture
 
@@ -17,21 +17,21 @@ Modules ES : chaque fichier importe explicitement ce qu'il utilise. `lib/` ne to
 |---|---|
 | `manifest.json` | MV3, Chrome ≥ 116 (`AbortSignal.any`) ; permissions `geolocation` et `storage` (dernier trajet) ; accès réseau aux trois API ; pas de service worker |
 | `popup/popup.html` | Interface ; charge `popup.js` en `<script type="module">` |
-| `popup/popup.js` | Événements, autocomplétion, rendu des résultats |
+| `popup/popup.js` | Formulaire, autocomplétion (combobox ARIA), rendu des résultats par le DOM, dernier trajet mémorisé (`chrome.storage.local`, clé `lastTrip`) |
 | `lib/config.js` | Constantes métier (vitesses, seuils, temps de prise/dépose, rayon de recherche) et clé OpenRouteService |
 | `lib/api.js` | Réseau : stations Vélib, géocodage IGN, itinéraire OpenRouteService, estimation transports en commun |
 | `lib/decision.js` | `analyzeVelibJourney` : agrège les appels et décide OUI/NON |
 | `lib/geo.js` | `isValidPosition`, distance de Haversine, `getCurrentPosition` |
-| `lib/utils.js` | Formatage distance/durée, `debounce`, `escapeHtml` |
+| `lib/utils.js` | Formatage distance/durée à la française, `debounce` |
 | `tests/unit/*.test.js` | Tests de `lib/`, un fichier par module ; `tests/helpers.js` fournit les réponses d'API simulées |
 | `tests/e2e/` | `browser.js` : client CDP minimal (lance Chrome, charge l'extension, pilote un onglet, sert les requêtes HTTPS) ; `popup.test.js` : scénarios |
 
-Déroulé d'une analyse : coordonnées du départ et de l'arrivée (mémorisées si l'adresse vient d'une suggestion ou de la géolocalisation, sinon géocodées) → en parallèle : stations autour du départ, stations autour de l'arrivée, itinéraire vélo, estimation transports → comparaison des durées → affichage.
+Déroulé d'une analyse : coordonnées du départ et de l'arrivée (connues si l'adresse vient d'une suggestion, de la géolocalisation ou du dernier trajet mémorisé, sinon géocodées) → en parallèle : stations autour du départ, stations autour de l'arrivée, itinéraire vélo, estimation transports → comparaison des durées → affichage.
 
 ## API externes
 
 - **Vélib temps réel** (sans clé) — `GET https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/velib-disponibilite-en-temps-reel/records`, requêtes ODSQL (`within_distance(...)`, `distance(...) as dist` en mètres, `order_by=dist`). Champs : `stationcode`, `name`, `numbikesavailable`, `numdocksavailable`, `mechanical`, `ebike`, `capacity`, `is_installed` / `is_renting` / `is_returning` (« OUI » / « NON »), `duedate`, `coordonnees_geo {lat, lon}`.
-- **Géocodage IGN Géoplateforme** (sans clé) — `GET https://data.geopf.fr/geocodage/search` et `/reverse`. `lat`/`lon` ne font que pondérer le classement : les résultats couvrent toute la France, d'où le filtre côté client sur les codes postaux 75/92/93/94. `index=address` (par défaut) ne connaît que les adresses ; `index=poi` trouve gares, stations de métro et monuments, mais renvoie `name`, `postcode` et `city` sous forme de tableaux et pas de `label`.
+- **Géocodage IGN Géoplateforme** (sans clé) — `GET https://data.geopf.fr/geocodage/search` et `/reverse`. `lat`/`lon` ne font que pondérer le classement : les résultats couvrent toute la France, d'où le filtre côté client sur les codes postaux 75/92/93/94. `index=address` (par défaut) ne connaît que les adresses ; `index=poi` trouve gares, stations de métro et monuments, mais renvoie `name`, `postcode` et `city` sous forme de tableaux et pas de `label`. L'extension interroge `index=address,poi`.
 - **OpenRouteService** (clé) — `POST https://api.openrouteservice.org/v2/directions/cycling-regular`, clé dans l'en-tête `Authorization`, quota gratuit limité. En cas d'échec, `calculateRoute` retombe sur une estimation à vol d'oiseau.
 
 ## Conventions
@@ -50,6 +50,7 @@ Déroulé d'une analyse : coordonnées du départ et de l'arrivée (mémorisées
 - Sous Node, le minuteur d'`AbortSignal.timeout` ne retient pas le processus : un test qui n'attend que lui doit garder la boucle d'événements occupée (voir `fetchJson` dans `api.test.js`).
 - Pour tester le géocodeur à la main sous Windows, passer par Node (`fetch`), pas par `curl` dans Git Bash : il transmet les accents dans le mauvais encodage (« Opéra » ne trouve alors rien).
 - Les distances aux stations sont à vol d'oiseau ; la vitesse de marche de 1,2 m/s intègre les détours.
+- Tests E2E : `openPopup` remet `chrome.storage.local` à zéro (ou au contenu passé dans `storage`) puis recharge, car la popup restaure le dernier trajet au chargement. Chrome headless suit le thème de Windows : forcer `page.emulateColorScheme('light')` pour une capture claire.
 - Chrome (version de marque) ignore `--load-extension` depuis la v137. Pour piloter l'extension en headless : `--remote-debugging-pipe --enable-unsafe-extension-debugging`, puis la commande CDP `Extensions.loadUnpacked`.
 
 ---
@@ -57,6 +58,8 @@ Déroulé d'une analyse : coordonnées du départ et de l'arrivée (mémorisées
 ## Améliorations à apporter
 
 Analyse du 15/10/2026 (commit `5f6f9b3`), faite en lisant tout le code, en interrogeant les trois API et en pilotant la popup dans Chrome headless.
+
+**État** : tous les éléments P0 à P2 sont traités (un commit par itération sur la branche `ameliorations`, 62 tests unitaires et 26 de bout en bout). Restent les sujets « Plus tard », qui demandent une décision du propriétaire.
 
 Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d'abord le test qui révèle le problème, corriger, lancer les tests, cocher la case ici, puis commiter avec un message `<ID> : <résumé>`.
 
@@ -121,7 +124,7 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 
 ### 📝 Documentation
 
-- [ ] **D1 — README obsolète.** Il annonce Nominatim (OpenStreetMap) alors que le géocodage passe par l'IGN, et n'explique ni comment développer ni comment tester.
+- [x] **D1 — README obsolète.** Il annonce Nominatim (OpenStreetMap) alors que le géocodage passe par l'IGN, et n'explique ni comment développer ni comment tester.
 
 ### ⏳ Plus tard — décision ou action du propriétaire nécessaire
 
@@ -129,6 +132,8 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 - **L2** — Itinéraire vélo calculé entre les stations retenues plutôt qu'entre l'origine et la destination ; profil `cycling-electric` quand seuls des vélos électriques sont disponibles.
 - **L3** — Clé OpenRouteService publique dans le code et dans l'historique git : la régénérer en cas d'abus. À terme : proxy serveur, ou clé personnelle saisie dans une page d'options.
 - **L4** — Version Firefox (`browser_specific_settings`, `background.scripts`).
-- **L5** — Publication sur le Chrome Web Store : archive sans tests ni outils, politique de confidentialité (exigée pour la géolocalisation), fichier LICENSE.
+- **L5** — Publication sur le Chrome Web Store : archive sans tests ni outils, politique de confidentialité (exigée pour la géolocalisation), fichier LICENSE, numéro de version à monter (`manifest.json` et `package.json`).
 - **L6** — Intégration continue (GitHub Actions) lançant `npm test`.
 - **L7** — Prévenir quand le trajet dépasse la durée incluse dans l'abonnement Vélib.
+- **L8** — Préférer une station avec au moins 2 vélos quand elle est à peine plus loin : un vélo seul est souvent en panne (c'était l'intention du réglage `minBikes`, jamais branché).
+- **L9** — Géocodage : « Notre-Dame de Paris » renvoie des écoles « Notre-Dame-de-… » (207 m d'écart seulement grâce au nom exact « Notre-Dame », mais le cas est fragile). Piste : retirer « de Paris » / « Paris » de la saisie avant la recherche brute.
