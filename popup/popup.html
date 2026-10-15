@@ -15,10 +15,16 @@
     <div class="location-section">
       <div class="input-group">
         <label for="current-location">Départ</label>
-        <input type="text" id="current-location" placeholder="Votre position actuelle">
-        <button id="detect-location" title="Détecter ma position">
-          <span class="icon-location"></span>
-        </button>
+        <div class="input-with-action">
+          <input type="text" id="current-location" placeholder="Votre position actuelle">
+          <button type="button" id="detect-location" class="icon-btn" title="Détecter ma position" aria-label="Détecter ma position">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="7"/>
+              <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+            </svg>
+          </button>
+        </div>
       </div>
       
       <div class="input-group">

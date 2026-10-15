@@ -54,7 +54,7 @@
     padding: 8px 12px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    font-size: C;
+    font-size: 14px;
   }
   
   button {
@@ -89,19 +89,28 @@
     background-color: #E0E0E0;
   }
   
-  #detect-location {
-    position: absolute;
-    right: 28px;
-    background: transparent;
-    padding: 8px;
+  .input-with-action {
+    position: relative;
   }
-  
-  .icon-location {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    background-image: url('../assets/icons/location.svg');
-    background-size: contain;
+
+  .input-with-action input[type="text"] {
+    padding-right: 40px;
+  }
+
+  .icon-btn {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    display: flex;
+    padding: 4px;
+    background: transparent;
+    color: var(--secondary-text);
+  }
+
+  .icon-btn:hover {
+    color: var(--primary-color);
+    background-color: #EEEEEE;
   }
   
   .hidden {

@@ -13,8 +13,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentLocationInput = document.getElementById('current-location');
     const destinationInput = document.getElementById('destination');
     const detectLocationBtn = document.getElementById('detect-location');
-    // Ajouter cette ligne pour créer le nouveau bouton
-    const showCoordsBtn = document.createElement('button');
     const analyzeBtn = document.getElementById('analyze-btn');
     const loadingSection = document.getElementById('loading');
     const resultSection = document.getElementById('result-section');
@@ -72,47 +70,6 @@ document.addEventListener('DOMContentLoaded', function() {
               }
             })
             .catch(error => console.error('Erreur de géocodage inverse:', error));
-        })
-        .catch(error => {
-          loadingSection.classList.add('hidden');
-          alert('Impossible de détecter votre position. Veuillez l\'entrer manuellement.');
-          console.error('Erreur de géolocalisation:', error);
-        });
-    });
-
-    // Configuration du bouton de coordonnées
-    showCoordsBtn.id = 'show-coords-btn';
-    showCoordsBtn.innerHTML = '📍 Coordonnées exactes';
-    showCoordsBtn.className = 'secondary-btn';
-    showCoordsBtn.style.marginTop = '8px';
-    
-    // Insérer le bouton après le champ de localisation
-    currentLocationInput.parentNode.appendChild(showCoordsBtn);
-    
-    // Écouteur d'événement pour le nouveau bouton
-    showCoordsBtn.addEventListener('click', function() {
-      loadingSection.classList.remove('hidden');
-      
-      getCurrentPosition()
-        .then(coords => {
-          const lat = coords.lat.toFixed(6);
-          const lng = coords.lng.toFixed(6);
-
-          // Afficher directement les coordonnées
-          currentLocationInput.value = `${lat}, ${lng}`;
-          setInputCoords(currentLocationInput, coords);
-          loadingSection.classList.add('hidden');
-          
-          // Optionnel: copier dans le presse-papier
-          navigator.clipboard.writeText(`${lat}, ${lng}`)
-            .then(() => {
-              // Indiquer visuellement que les coordonnées ont été copiées
-              showCoordsBtn.innerHTML = '✓ Coordonnées copiées';
-              setTimeout(() => {
-                showCoordsBtn.innerHTML = '📍 Coordonnées exactes';
-              }, 2000);
-            })
-            .catch(err => console.error('Erreur lors de la copie:', err));
         })
         .catch(error => {
           loadingSection.classList.add('hidden');

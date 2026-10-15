@@ -78,6 +78,27 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     await page.screenshot('trajet-court');
   });
 
+  test('le bouton de géolocalisation est visible, dans le champ Départ', async () => {
+    page = await browser.openPopup({ api: fakeApi() });
+
+    const layout = await page.evaluate(() => {
+      const rect = selector => document.querySelector(selector)?.getBoundingClientRect().toJSON();
+      const icon = document.querySelector('#detect-location svg');
+      return {
+        input: rect('#current-location'),
+        button: rect('#detect-location'),
+        iconWidth: icon?.getBoundingClientRect().width ?? 0,
+        coordsButton: Boolean(document.getElementById('show-coords-btn'))
+      };
+    });
+
+    const { input, button } = layout;
+    assert.ok(layout.iconWidth > 0, "l'icône est affichée");
+    assert.ok(button.left >= input.left && button.right <= input.right, 'bouton dans la largeur du champ');
+    assert.ok(button.top >= input.top && button.bottom <= input.bottom, 'bouton dans la hauteur du champ');
+    assert.equal(layout.coordsButton, false, 'plus de bouton « Coordonnées exactes » en doublon');
+  });
+
   test("géolocalisation : le départ affiche l'adresse détectée", async () => {
     page = await browser.openPopup({ api: fakeApi({ reverseLabel: '12 Rue de Rivoli 75004 Paris' }) });
 
