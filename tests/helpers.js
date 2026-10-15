@@ -54,13 +54,16 @@ export function velibByPoint(stationsFor) {
   };
 }
 
-/** Enregistrement au format de l'API Vélib (opendata.paris.fr) */
+/** Enregistrement au format de l'API Vélib (opendata.paris.fr), station en service par défaut */
 export function velibRecord({ code, name = `Station ${code}`, bikes = 5, docks = 5, dist = 100, lat = 48.8566, lng = 2.3522, ...rest }) {
   return {
     stationcode: code,
     name,
     numbikesavailable: bikes,
     numdocksavailable: docks,
+    is_installed: 'OUI',
+    is_renting: 'OUI',
+    is_returning: 'OUI',
     coordonnees_geo: { lat, lon: lng },
     dist,
     ...rest

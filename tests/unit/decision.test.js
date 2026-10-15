@@ -89,6 +89,34 @@ describe('analyzeVelibJourney', () => {
     assert.equal(result.totalDuration, 537 + Math.round(100 / 1.2) + Math.round(150 / 1.2) + 120);
   });
 
+  test('ignore les stations hors service, même si elles annoncent des vélos ou des places', async t => {
+    stubJourney(t, {
+      departure: [
+        velibRecord({ code: 'D-travaux', bikes: 3, dist: 50, is_renting: 'NON' }),
+        velibRecord({ code: 'D1', bikes: 10, dist: 300 })
+      ],
+      arrival: [
+        velibRecord({ code: 'A-bloquee', docks: 20, dist: 40, is_returning: 'NON' }),
+        velibRecord({ code: 'A1', docks: 10, dist: 250 })
+      ]
+    });
+
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    assert.deepEqual(result.departureStations.map(s => s.id), ['D1']);
+    assert.deepEqual(result.arrivalStations.map(s => s.id), ['A1']);
+  });
+
+  test('non si toutes les stations du départ sont hors service', async t => {
+    stubJourney(t, {
+      departure: [velibRecord({ code: 'D-travaux', bikes: 3, is_installed: 'NON' })],
+      arrival: [velibRecord({ code: 'A1' })]
+    });
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
+    assert.equal(result.recommendation, false);
+    assert.match(result.reason, /Aucune station Vélib disponible près de votre point de départ/);
+  });
+
   test('non sans station près du départ', async t => {
     stubJourney(t, { departure: [], arrival: [velibRecord({ code: 'A1' })] });
     const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);

@@ -50,11 +50,14 @@ describe('getNearbyVelibStations', () => {
     const params = new URL(calls[0].url).searchParams;
     assert.equal(params.get('where'), "within_distance(coordonnees_geo,geom'POINT(2.3522219 48.856614)',1500m)");
     assert.equal(params.get('order_by'), 'dist');
+    assert.match(params.get('select'), /is_installed,is_renting,is_returning/);
     assert.deepEqual(stations, [{
       id: '4016',
       name: 'Lobau - Hôtel de Ville',
       bikes: 51,
       docks: 7,
+      renting: true,
+      returning: true,
       lat: 48.8562,
       lng: 2.3532,
       distance: 87.7,
@@ -62,6 +65,27 @@ describe('getNearbyVelibStations', () => {
       walkDuration: 73,
       durationText: '1min'
     }]);
+  });
+
+  test('signale les stations qui ne louent pas ou ne reprennent pas de vélos', async t => {
+    stubFetch(t, [[/opendata\.paris\.fr/, {
+      results: [
+        velibRecord({ code: 'travaux', is_renting: 'NON', is_returning: 'NON' }),
+        velibRecord({ code: 'pleine', is_returning: 'NON' }),
+        velibRecord({ code: 'demontee', is_installed: 'NON' })
+      ]
+    }]]);
+
+    const stations = await getNearbyVelibStations(HOTEL_DE_VILLE, 1500);
+
+    assert.deepEqual(
+      stations.map(({ id, renting, returning }) => ({ id, renting, returning })),
+      [
+        { id: 'travaux', renting: false, returning: false },
+        { id: 'pleine', renting: true, returning: false },
+        { id: 'demontee', renting: false, returning: false }
+      ]
+    );
   });
 
   test('élargit le rayon de recherche loin du centre de Paris', async t => {
