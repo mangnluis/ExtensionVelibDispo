@@ -70,11 +70,11 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 
 ### 🟠 P1 — Justesse des calculs
 
-- [ ] **C1 — Marche plafonnée à 5 min.** `velibTime` ajoute `Math.min(walkDuration, 300)` alors que la station retenue peut être à 1 km (~14 min) : les recommandations sont trop optimistes. Le détail affiché ne correspond pas au total, car il montre la marche non plafonnée et « prise/dépose 2 min » même quand 1 min est comptée (trajets < 2 km).
+- [x] **C1 — Marche plafonnée à 5 min.** `velibTime` ajoute `Math.min(walkDuration, 300)` alors que la station retenue peut être à 1 km (~14 min) : les recommandations sont trop optimistes. Le détail affiché ne correspond pas au total, car il montre la marche non plafonnée et « prise/dépose 2 min » même quand 1 min est comptée (trajets < 2 km).
 - [x] **C2 — Estimation de secours incohérente.** `calculateRoute` multiplie la distance par 1,2, mais calcule la durée sur la distance à vol d'oiseau à 20 km/h. OpenRouteService mesure environ 16 km/h dans Paris. *Correctif* : durée = distance estimée / 15 km/h.
 - [x] **C3 — Constantes contradictoires.** La marche est à 1,2 m/s dans `api.js` et à 1,4 m/s dans `decision.js`. L'alternative « trajet trop long » est à 18 km/h au lieu de passer par `getTransportAlternatives` (30 km/h + attente + marche). *Correctif* : constantes partagées dans `lib/config.js` ; le modèle transports en commun (vitesses, attente) reste documenté dans `getTransportAlternatives`, seul à s'en servir.
-- [ ] **C4 — Même station au départ et à l'arrivée.** Sur un trajet court, la station la plus proche peut être la même aux deux bouts : l'extension propose de prendre un vélo pour le reposer au même endroit.
-- [ ] **C5 — Formatage.** `formatDuration` : 59 s → « 0min », 65 min → « 1h5 » (à lire « 1 h 05 »). `formatDistance` : point décimal anglais (« 1.5km »).
+- [x] **C4 — Même station au départ et à l'arrivée.** Sur un trajet court, la station la plus proche peut être la même aux deux bouts : l'extension propose de prendre un vélo pour le reposer au même endroit.
+- [x] **C5 — Formatage.** `formatDuration` : 59 s → « 0min », 65 min → « 1h5 » (à lire « 1 h 05 »). `formatDistance` : point décimal anglais (« 1.5km »).
 - [x] **C6 — Validation des coordonnées.** Le test `!origin.lat` rejette 0 et accepte des chaînes : utiliser `Number.isFinite`.
 
 ### 🟡 P1 — Qualité du code

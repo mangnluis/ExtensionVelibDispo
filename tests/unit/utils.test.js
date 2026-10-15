@@ -2,14 +2,24 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { debounce, escapeHtml, formatDistance, formatDuration } from '../../lib/utils.js';
 
-test('formatDistance : mètres sous 1 km, kilomètres au-delà', () => {
-  assert.equal(formatDistance(250.4), '250m');
-  assert.equal(formatDistance(1500), '1.5km');
+// Espace insécable entre le nombre et l'unité : « 16 min » ne se coupe pas en fin de ligne
+const NBSP = ' ';
+
+test('formatDistance : mètres sous 1 km, kilomètres à la française au-delà', () => {
+  assert.equal(formatDistance(250.4), `250${NBSP}m`);
+  assert.equal(formatDistance(1500), `1,5${NBSP}km`);
+  assert.equal(formatDistance(999.7), `1,0${NBSP}km`, '999,7 m arrondis ne font pas « 1000 m »');
 });
 
-test('formatDuration : minutes puis heures', () => {
-  assert.equal(formatDuration(16 * 60), '16min');
-  assert.equal(formatDuration(2 * 3600), '2h');
+test('formatDuration : arrondi à la minute la plus proche', () => {
+  assert.equal(formatDuration(29), `<${NBSP}1${NBSP}min`);
+  assert.equal(formatDuration(59), `1${NBSP}min`);
+  assert.equal(formatDuration(16 * 60 + 40), `17${NBSP}min`);
+});
+
+test('formatDuration : heures et minutes sur deux chiffres', () => {
+  assert.equal(formatDuration(65 * 60), `1${NBSP}h${NBSP}05`);
+  assert.equal(formatDuration(2 * 3600), `2${NBSP}h`);
 });
 
 test('escapeHtml neutralise les caractères HTML', () => {

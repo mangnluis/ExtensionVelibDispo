@@ -1,13 +1,22 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getTransportAlternatives } from '../../lib/api.js';
-import { WALKING_SPEED } from '../../lib/config.js';
+import { DOCKING_TIME, SHORT_TRIP_DOCKING_TIME, WALKING_SPEED } from '../../lib/config.js';
 import { analyzeVelibJourney, getBestStations, shouldRecommendVelib } from '../../lib/decision.js';
 import { calculateHaversineDistance } from '../../lib/geo.js';
 import { jsonResponse, silenceConsole, stubFetch, velibByPoint, velibRecord } from '../helpers.js';
 
 const HOTEL_DE_VILLE = { lat: 48.856614, lng: 2.3522219 };
 const GARE_DE_LYON = { lat: 48.844162, lng: 2.374677 };
+
+/** Minutes du détail « Temps estimé : T min (vélo B min, marche W min, prise/dépose D min) » */
+function parseBreakdown(reason) {
+  const match = reason.match(/Temps estimé : (.+?) \(vélo (.+?), marche (.+?), prise\/dépose (.+?)\)/);
+  assert.ok(match, `détail introuvable dans : ${reason}`);
+  const minutes = text => (text.startsWith('<') ? 0 : Number(text.match(/\d+/)[0]));
+  const [total, bike, walk, docking] = match.slice(1).map(minutes);
+  return { total, bike, walk, docking };
+}
 
 /** API simulées : stations au départ (nord) et à l'arrivée (sud), itinéraire ORS */
 function stubJourney(t, { departure, arrival, route = { distance: 2462, duration: 537 } }) {
@@ -99,6 +108,60 @@ describe('analyzeVelibJourney', () => {
     assert.equal(result.departureStations[0].id, 'D1');
     assert.equal(result.arrivalStations[0].id, 'A1');
     assert.equal(result.totalDuration, 537 + Math.round(100 / 1.2) + Math.round(150 / 1.2) + 120);
+  });
+
+  test("compte toute la marche jusqu'aux stations, sans plafond", async t => {
+    stubJourney(t, {
+      departure: [velibRecord({ code: 'D-loin', bikes: 10, dist: 900 })],
+      arrival: [velibRecord({ code: 'A1', docks: 10, dist: 150 })]
+    });
+
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    const walk = Math.round(900 / WALKING_SPEED) + Math.round(150 / WALKING_SPEED);
+    assert.equal(result.totalDuration, 537 + walk + DOCKING_TIME);
+  });
+
+  test("le détail affiché s'additionne exactement au total", async t => {
+    // 530 s + 150 s + 120 s = 13,3 min, mais les parties arrondies font 9 + 3 + 2 = 14 min
+    stubJourney(t, {
+      departure: [velibRecord({ code: 'D1', bikes: 10, dist: 90 })],
+      arrival: [velibRecord({ code: 'A1', docks: 10, dist: 90 })],
+      route: { distance: 2462, duration: 530 }
+    });
+
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    const { total, bike, walk, docking } = parseBreakdown(result.reason);
+    assert.deepEqual({ bike, walk, docking }, { bike: 9, walk: 3, docking: 2 });
+    assert.equal(total, bike + walk + docking);
+  });
+
+  test('affiche la prise/dépose réellement comptée sur un trajet court', async t => {
+    stubJourney(t, {
+      departure: [velibRecord({ code: 'D1', bikes: 10, dist: 100 })],
+      arrival: [velibRecord({ code: 'A1', docks: 10, dist: 150 })],
+      route: { distance: 1500, duration: 400 }
+    });
+
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    assert.equal(result.recommendation, true);
+    assert.equal(parseBreakdown(result.reason).docking, SHORT_TRIP_DOCKING_TIME / 60);
+  });
+
+  test("pas de Vélib quand la même station sert au départ et à l'arrivée", async t => {
+    silenceConsole(t);
+    stubFetch(t, [
+      [/opendata\.paris\.fr/, { results: [velibRecord({ code: 'S1', name: 'Station du milieu', bikes: 10, docks: 10, dist: 50 })] }],
+      [/openrouteservice/, { routes: [{ summary: { distance: 900, duration: 220 } }] }]
+    ]);
+
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, { lat: 48.8606, lng: 2.3433 }); // ~800 m
+
+    assert.equal(result.recommendation, false);
+    assert.match(result.reason, /Station du milieu.*la plus proche au départ comme à l'arrivée/);
+    assert.match(result.alternative.mode, /Marche/);
   });
 
   test('ignore les stations hors service, même si elles annoncent des vélos ou des places', async t => {
