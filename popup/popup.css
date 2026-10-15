@@ -255,7 +255,8 @@
   border-bottom: none;
 }
 
-.suggestion-item:hover {
+.suggestion-item:hover,
+.suggestion-item[aria-selected="true"] {
   background-color: #f5f5f5;
 }
 

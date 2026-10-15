@@ -94,7 +94,7 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 ### 🔵 P2 — Expérience utilisateur et accessibilité
 
 - [x] **U1 — `alert()` pour toutes les erreurs** : les remplacer par un message dans la popup.
-- [ ] **U2 — Clavier.** Entrée ne lance pas l'analyse (pas de `<form>`). Les suggestions ne se parcourent pas au clavier (↑ ↓ Entrée Échap) et n'ont pas de rôle ARIA. Sans `autocomplete="off"`, l'autoremplissage du navigateur recouvre les suggestions.
+- [x] **U2 — Clavier.** Entrée ne lance pas l'analyse (pas de `<form>`). Les suggestions ne se parcourent pas au clavier (↑ ↓ Entrée Échap) et n'ont pas de rôle ARIA. Sans `autocomplete="off"`, l'autoremplissage du navigateur recouvre les suggestions.
 - [x] **U3 — Double clic sur « Analyser ».** Deux analyses tournent en parallèle et la plus lente écrase l'autre. Désactiver le bouton pendant le calcul.
 - [ ] **U4 — Contrastes insuffisants.** Vert `#4CAF50` sur blanc : 2,8:1 (bouton principal, « OUI », disponibilités). Orange : 2:1. Le minimum WCAG AA est de 4,5:1.
 - [x] **U5 — « Nouvelle recherche »** se contente de masquer les résultats.

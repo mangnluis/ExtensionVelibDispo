@@ -10,6 +10,7 @@ import { debounce } from '../lib/utils.js';
 
 // Module chargé en fin de page : le DOM est déjà analysé
 
+const tripForm = document.getElementById('trip-form');
 const currentLocationInput = document.getElementById('current-location');
 const destinationInput = document.getElementById('destination');
 const detectLocationBtn = document.getElementById('detect-location');
@@ -106,8 +107,9 @@ detectLocationBtn.addEventListener('click', () => {
     .finally(() => setBusy(false));
 });
 
-// Analyse du trajet
-analyzeBtn.addEventListener('click', () => {
+// Analyse du trajet (bouton ou touche Entrée)
+tripForm.addEventListener('submit', event => {
+  event.preventDefault();
   clearError();
   if (!destinationInput.value.trim()) {
     showError('Veuillez entrer une destination.');
@@ -241,49 +243,91 @@ function renderAlternative({ recommendation, alternative }) {
   alternativeContent.replaceChildren(item);
 }
 
-// Autocomplétion des adresses
-setupAutocomplete(currentLocationInput, createAutocompleteContainer(currentLocationInput));
-setupAutocomplete(destinationInput, createAutocompleteContainer(destinationInput));
+// Autocomplétion des adresses (motif ARIA « combobox » : ↑ ↓ pour parcourir, Entrée pour choisir, Échap pour fermer)
+setupAutocomplete(currentLocationInput);
+setupAutocomplete(destinationInput);
 
-function createAutocompleteContainer(inputElement) {
-  const container = createElement('div', 'autocomplete-suggestions hidden');
-  inputElement.parentNode.insertBefore(container, inputElement.nextSibling);
-  return container;
-}
+function setupAutocomplete(inputElement) {
+  const listbox = createElement('div', 'autocomplete-suggestions hidden');
+  listbox.id = `${inputElement.id}-suggestions`;
+  listbox.setAttribute('role', 'listbox');
+  listbox.setAttribute('aria-label', 'Suggestions');
+  inputElement.after(listbox);
 
-function setupAutocomplete(inputElement, suggestionsContainer) {
+  inputElement.setAttribute('role', 'combobox');
+  inputElement.setAttribute('aria-autocomplete', 'list');
+  inputElement.setAttribute('aria-controls', listbox.id);
+  inputElement.setAttribute('aria-expanded', 'false');
+
   let pendingSearch = null;
+  let suggestions = [];
+  let activeIndex = -1;
+
+  function isOpen() {
+    return !listbox.classList.contains('hidden');
+  }
+
+  function close() {
+    // Une recherche encore en cours rouvrirait la liste : elle n'est plus utile
+    pendingSearch?.abort();
+    setVisible(listbox, false);
+    inputElement.setAttribute('aria-expanded', 'false');
+    highlight(-1);
+  }
+
+  function highlight(index) {
+    activeIndex = index;
+    [...listbox.children].forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
+    const active = listbox.children[index];
+    if (active) {
+      inputElement.setAttribute('aria-activedescendant', active.id);
+      active.scrollIntoView({ block: 'nearest' });
+    } else {
+      inputElement.removeAttribute('aria-activedescendant');
+    }
+  }
+
+  function select(suggestion) {
+    inputElement.value = suggestion.display_name;
+    inputCoords.set(inputElement, { lat: suggestion.lat, lng: suggestion.lng });
+    close();
+  }
+
+  function open(results) {
+    suggestions = results;
+    listbox.replaceChildren(...results.map((suggestion, index) => {
+      const option = createElement('div', 'suggestion-item', suggestion.display_name);
+      option.id = `${listbox.id}-${index}`;
+      option.setAttribute('role', 'option');
+      // mousedown plutôt que click : le champ garde le focus, la liste ne se ferme pas avant le choix
+      option.addEventListener('mousedown', event => {
+        event.preventDefault();
+        select(suggestion);
+      });
+      return option;
+    }));
+    highlight(-1);
+    setVisible(listbox, results.length > 0);
+    inputElement.setAttribute('aria-expanded', String(results.length > 0));
+  }
 
   // Debounce pour limiter les requêtes pendant la frappe
   const debouncedSearch = debounce(searchText => {
     // Annuler la recherche précédente : sa réponse n'est plus utile
-    if (pendingSearch) {
-      pendingSearch.abort();
-    }
+    pendingSearch?.abort();
 
     if (searchText.length < 3) {
-      setVisible(suggestionsContainer, false);
+      close();
       return;
     }
 
     const controller = new AbortController();
     pendingSearch = controller;
 
-    searchAddresses(searchText, controller.signal).then(suggestions => {
-      if (controller.signal.aborted) {
-        return;
+    searchAddresses(searchText, controller.signal).then(results => {
+      if (!controller.signal.aborted && document.activeElement === inputElement) {
+        open(results);
       }
-
-      suggestionsContainer.replaceChildren(...suggestions.map(suggestion => {
-        const item = createElement('div', 'suggestion-item', suggestion.display_name);
-        item.addEventListener('click', () => {
-          inputElement.value = suggestion.display_name;
-          inputCoords.set(inputElement, { lat: suggestion.lat, lng: suggestion.lng });
-          setVisible(suggestionsContainer, false);
-        });
-        return item;
-      }));
-      setVisible(suggestionsContainer, suggestions.length > 0);
     });
   }, 250);
 
@@ -293,10 +337,26 @@ function setupAutocomplete(inputElement, suggestionsContainer) {
     debouncedSearch(inputElement.value);
   });
 
-  // Masquer les suggestions lors d'un clic ailleurs
-  document.addEventListener('click', event => {
-    if (event.target !== inputElement) {
-      setVisible(suggestionsContainer, false);
+  inputElement.addEventListener('keydown', event => {
+    if (!isOpen()) {
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      highlight((activeIndex + 1) % suggestions.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      highlight(activeIndex <= 0 ? suggestions.length - 1 : activeIndex - 1);
+    } else if (event.key === 'Enter' && activeIndex >= 0) {
+      // Choisir la suggestion, pas lancer l'analyse
+      event.preventDefault();
+      select(suggestions[activeIndex]);
+    } else if (event.key === 'Escape') {
+      // Ferme la liste sans fermer la popup
+      event.preventDefault();
+      close();
     }
   });
+
+  inputElement.addEventListener('blur', close);
 }

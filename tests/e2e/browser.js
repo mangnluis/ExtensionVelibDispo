@@ -225,6 +225,17 @@ class Page {
     }, selector);
   }
 
+  /** Clic de souris réel au centre de l'élément (focus, mousedown, mouseup, click) */
+  async mouseClick(selector) {
+    const { x, y } = await this.evaluate(sel => {
+      const rect = document.querySelector(sel).getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, selector);
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await this.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+    }
+  }
+
   /** Remplace la valeur d'un champ sans déclencher d'événement (pas d'autocomplétion) */
   fill(selector, value) {
     return this.evaluate((sel, val) => {

@@ -12,11 +12,11 @@
       <h1>Vélib Advisor</h1>
     </header>
 
-    <div class="location-section">
+    <form id="trip-form" class="location-section">
       <div class="input-group">
         <label for="current-location">Départ</label>
         <div class="input-with-action">
-          <input type="text" id="current-location" placeholder="Votre position actuelle">
+          <input type="text" id="current-location" placeholder="Votre position actuelle" autocomplete="off">
           <button type="button" id="detect-location" class="icon-btn" title="Détecter ma position" aria-label="Détecter ma position">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <circle cx="12" cy="12" r="7"/>
@@ -29,11 +29,11 @@
 
       <div class="input-group">
         <label for="destination">Destination</label>
-        <input type="text" id="destination" placeholder="Où allez-vous ?">
+        <input type="text" id="destination" placeholder="Où allez-vous ?" autocomplete="off">
       </div>
 
-      <button type="button" id="analyze-btn" class="primary-btn">Analyser mon trajet</button>
-    </div>
+      <button type="submit" id="analyze-btn" class="primary-btn">Analyser mon trajet</button>
+    </form>
 
     <p id="error-message" class="error-message hidden" role="alert"></p>
 

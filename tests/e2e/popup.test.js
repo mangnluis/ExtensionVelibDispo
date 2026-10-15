@@ -1,6 +1,6 @@
 import { after, afterEach, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { velibRecord } from '../helpers.js';
+import { poiFeature, velibRecord } from '../helpers.js';
 import { findChrome, launchBrowser } from './browser.js';
 import { fakeApi, GARE_DE_LYON, HOTEL_DE_VILLE } from './fake-api.js';
 
@@ -195,6 +195,94 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     assert.match(await page.text('#error-message'), /Impossible de détecter votre position/);
     assert.equal(await page.evaluate(() => document.getElementById('detect-location').disabled), false);
     assert.deepEqual(page.dialogs, []);
+  });
+
+  test("Entrée dans un champ lance l'analyse", async () => {
+    page = await browser.openPopup({ api: fakeApi() });
+    await fillTrip(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    await page.evaluate(() => document.getElementById('destination').focus());
+    await page.press('Enter');
+    await waitForOutcome();
+
+    assert.match(await page.text('#recommendation'), /OUI/);
+  });
+
+  describe('suggestions d\'adresses', () => {
+    const addresses = [
+      poiFeature({ name: 'Bastille', lat: 48.8531, lng: 2.3691, postcode: '75004' }),
+      poiFeature({ name: 'Parking Bastille', lat: 48.852, lng: 2.369, postcode: '75012', category: 'parking' })
+    ];
+    const isListOpen = () => page.evaluate(() => !document.getElementById('destination-suggestions').classList.contains('hidden'));
+
+    async function typeDestination(text) {
+      page = await browser.openPopup({ api: fakeApi({ addresses }) });
+      await page.fill('#current-location', asText(HOTEL_DE_VILLE));
+      await page.type('#destination', text);
+      await page.waitFor(() => !document.getElementById('destination-suggestions').classList.contains('hidden'));
+    }
+
+    test('suivent le motif ARIA combobox, sans autoremplissage du navigateur', async () => {
+      await typeDestination('bastille');
+
+      const aria = await page.evaluate(() => {
+        const input = document.getElementById('destination');
+        const listbox = document.getElementById(input.getAttribute('aria-controls'));
+        return {
+          role: input.getAttribute('role'),
+          expanded: input.getAttribute('aria-expanded'),
+          autocomplete: input.getAttribute('autocomplete'),
+          listboxRole: listbox?.getAttribute('role'),
+          optionRoles: [...listbox.children].map(option => option.getAttribute('role'))
+        };
+      });
+      assert.deepEqual(aria, {
+        role: 'combobox',
+        expanded: 'true',
+        autocomplete: 'off',
+        listboxRole: 'listbox',
+        optionRoles: ['option', 'option']
+      });
+      await page.screenshot('suggestions');
+    });
+
+    test("↓ puis Entrée choisit une suggestion sans lancer l'analyse, qui utilise ensuite ses coordonnées", async () => {
+      await typeDestination('bastille');
+
+      await page.press('ArrowDown');
+      assert.equal(await page.evaluate(() => document.getElementById('destination').getAttribute('aria-activedescendant')), 'destination-suggestions-0');
+      await page.press('Enter');
+
+      assert.equal(await page.evaluate(() => document.getElementById('destination').value), 'Bastille (station de métro) 75004 Paris');
+      assert.equal(await isListOpen(), false);
+      assert.equal(await page.isVisible('#result-section'), false, "le choix ne lance pas l'analyse");
+
+      await page.press('Enter');
+      await waitForOutcome();
+      const searchedPoints = page.requests
+        .filter(request => request.url.includes('opendata.paris.fr'))
+        .map(request => new URL(request.url).searchParams.get('where'));
+      assert.ok(searchedPoints.some(where => where.includes('POINT(2.3691 48.8531)')), 'stations cherchées autour du lieu choisi');
+    });
+
+    test('Échap ferme la liste sans toucher à la saisie', async () => {
+      await typeDestination('bastille');
+
+      await page.press('Escape');
+
+      assert.equal(await isListOpen(), false);
+      assert.equal(await page.evaluate(() => document.getElementById('destination').getAttribute('aria-expanded')), 'false');
+      assert.equal(await page.evaluate(() => document.getElementById('destination').value), 'bastille');
+    });
+
+    test('un clic de souris choisit la suggestion', async () => {
+      await typeDestination('bastille');
+
+      await page.mouseClick('#destination-suggestions-1');
+
+      assert.equal(await page.evaluate(() => document.getElementById('destination').value), 'Parking Bastille (parking) 75012 Paris');
+      assert.equal(await isListOpen(), false);
+    });
   });
 
   test('destination manquante : demande de la saisir, dans la popup', async () => {
