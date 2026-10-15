@@ -58,12 +58,17 @@ export function velibByPoint(stationsFor) {
   };
 }
 
-/** Enregistrement au format de l'API Vélib (opendata.paris.fr), station en service par défaut */
-export function velibRecord({ code, name = `Station ${code}`, bikes = 5, docks = 5, dist = 100, lat = 48.8566, lng = 2.3522, ...rest }) {
+/**
+ * Enregistrement au format de l'API Vélib (opendata.paris.fr), station en service par défaut ;
+ * sans précision, tous les vélos sont mécaniques
+ */
+export function velibRecord({ code, name = `Station ${code}`, bikes = 5, ebike = 0, docks = 5, dist = 100, lat = 48.8566, lng = 2.3522, ...rest }) {
   return {
     stationcode: code,
     name,
     numbikesavailable: bikes,
+    mechanical: bikes - ebike,
+    ebike,
     numdocksavailable: docks,
     is_installed: 'OUI',
     is_renting: 'OUI',

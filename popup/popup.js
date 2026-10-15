@@ -158,7 +158,7 @@ function renderResult(result) {
   renderAlternative(result);
 }
 
-function renderRecommendation({ recommendation, reason, alternative }) {
+function renderRecommendation({ recommendation, reason, alternative, routeEstimated }) {
   const card = createElement('div', recommendation ? 'result-yes' : 'result-no');
   card.append(
     createElement('p', `decision-text ${recommendation ? 'decision-yes' : 'decision-no'}`,
@@ -168,6 +168,9 @@ function renderRecommendation({ recommendation, reason, alternative }) {
   // Quand le Vélib l'emporte, l'alternative n'a pas de section à elle : on la rappelle ici
   if (recommendation && alternative) {
     card.append(createElement('p', 'decision-details', `Alternative : ${alternative.mode} (${alternative.durationText})`));
+  }
+  if (routeEstimated) {
+    card.append(createElement('p', 'decision-note', "Durée à vélo estimée : le calcul d'itinéraire n'a pas répondu."));
   }
   recommendationDiv.replaceChildren(card);
 }
@@ -201,6 +204,11 @@ const AVAILABILITY_TEXT = {
   docks: count => (count === 0 ? 'Aucune place' : `${count} place${count > 1 ? 's' : ''} disponible${count > 1 ? 's' : ''}`)
 };
 
+function describeBikeTypes({ mechanical, ebike }) {
+  const plural = count => (count > 1 ? 's' : '');
+  return `${mechanical} mécanique${plural(mechanical)} · ${ebike} électrique${plural(ebike)}`;
+}
+
 function getAvailabilityClass(count) {
   if (count >= 5) return 'good-availability';
   if (count >= 1) return 'low-availability';
@@ -218,6 +226,10 @@ function fillStationList(listElement, stations, key) {
 
     const item = createElement('li', 'station-item');
     item.append(createElement('p', 'station-name', station.name), details);
+    // Au départ, le type de vélo compte : l'électrique est plus rapide, mais plus cher
+    if (key === 'bikes' && station.bikes > 0 && station.mechanical !== null && station.ebike !== null) {
+      item.append(createElement('p', 'bike-types', describeBikeTypes(station)));
+    }
     return item;
   }));
 }

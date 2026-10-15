@@ -45,7 +45,7 @@ describe('fetchJson', () => {
 describe('getNearbyVelibStations', () => {
   test("interroge l'API Vélib autour du point et convertit les stations", async t => {
     const calls = stubFetch(t, [[/opendata\.paris\.fr/, {
-      results: [velibRecord({ code: '4016', name: 'Lobau - Hôtel de Ville', bikes: 51, docks: 7, dist: 87.7, lat: 48.8562, lng: 2.3532 })]
+      results: [velibRecord({ code: '4016', name: 'Lobau - Hôtel de Ville', bikes: 51, ebike: 31, docks: 7, dist: 87.7, lat: 48.8562, lng: 2.3532 })]
     }]]);
 
     const stations = await getNearbyVelibStations(HOTEL_DE_VILLE, 1500);
@@ -54,10 +54,13 @@ describe('getNearbyVelibStations', () => {
     assert.equal(params.get('where'), "within_distance(coordonnees_geo,geom'POINT(2.3522219 48.856614)',1500m)");
     assert.equal(params.get('order_by'), 'dist');
     assert.match(params.get('select'), /is_installed,is_renting,is_returning/);
+    assert.match(params.get('select'), /mechanical,ebike/);
     assert.deepEqual(stations, [{
       id: '4016',
       name: 'Lobau - Hôtel de Ville',
       bikes: 51,
+      mechanical: 20,
+      ebike: 31,
       docks: 7,
       renting: true,
       returning: true,

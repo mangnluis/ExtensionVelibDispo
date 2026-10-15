@@ -104,10 +104,23 @@ describe('analyzeVelibJourney', () => {
     const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
 
     assert.equal(result.recommendation, true);
+    assert.equal(result.routeEstimated, false);
     assert.match(result.alternative.mode, /Transport en commun/, "l'alternative est fournie même quand le Vélib l'emporte");
     assert.equal(result.departureStations[0].id, 'D1');
     assert.equal(result.arrivalStations[0].id, 'A1');
     assert.equal(result.totalDuration, 537 + Math.round(100 / 1.2) + Math.round(150 / 1.2) + 120);
+  });
+
+  test("signale une durée vélo estimée quand l'itinéraire n'a pas répondu", async t => {
+    silenceConsole(t);
+    stubFetch(t, [
+      [/opendata\.paris\.fr/, velibByPoint(lat => [velibRecord({ code: lat > 48.85 ? 'D1' : 'A1', bikes: 10, docks: 10 })])],
+      [/openrouteservice/, () => jsonResponse({}, 500)]
+    ]);
+
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    assert.equal(result.routeEstimated, true);
   });
 
   test("compte toute la marche jusqu'aux stations, sans plafond", async t => {

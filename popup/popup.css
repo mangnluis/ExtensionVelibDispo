@@ -365,3 +365,16 @@ footer {
   color: var(--secondary-text);
   border-top: 1px solid var(--border-color);
 }
+
+.decision-note {
+  margin-top: 8px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--secondary-text);
+}
+
+.bike-types {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--secondary-text);
+}

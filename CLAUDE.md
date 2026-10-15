@@ -98,20 +98,20 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 - [x] **U3 — Double clic sur « Analyser ».** Deux analyses tournent en parallèle et la plus lente écrase l'autre. Désactiver le bouton pendant le calcul.
 - [x] **U4 — Contrastes insuffisants.** Vert `#4CAF50` sur blanc : 2,8:1 (bouton principal, « OUI », disponibilités). Orange : 2:1. Le minimum WCAG AA est de 4,5:1.
 - [x] **U5 — « Nouvelle recherche »** se contente de masquer les résultats.
-- [ ] **U6 — Estimation non signalée.** Quand OpenRouteService échoue, la durée vélo est une estimation, mais rien ne l'indique (le champ `estimated` n'est jamais lu).
+- [x] **U6 — Estimation non signalée.** Quand OpenRouteService échoue, la durée vélo est une estimation, mais rien ne l'indique (le champ `estimated` n'est jamais lu).
 - [x] **U7 — Pas de mode sombre** (`prefers-color-scheme`). Fait : jetons de couleur dans `:root`, redéfinis pour le thème sombre.
 
 ### 🟢 P2 — Fonctionnalités
 
-- [ ] **F1 — Vélos mécaniques et électriques.** L'API fournit `mechanical` et `ebike`, l'interface n'affiche qu'un total.
+- [x] **F1 — Vélos mécaniques et électriques.** L'API fournit `mechanical` et `ebike`, l'interface n'affiche qu'un total.
 - [ ] **F2 — Mémoriser la dernière recherche.** La popup repart de zéro à chaque ouverture.
 - [ ] **F3 — Bouton d'inversion départ ⇄ arrivée** pour le trajet retour.
 - [x] **F4 — Liste complète des stations dans la popup** (remplace le lien console de Q4).
 
 ### ⚡ P2 — Performances
 
-- [ ] **P1 — Requête stations surdimensionnée.** `limit: 30` alors que 3 stations sont affichées par côté.
-- [ ] **P2 — Appels en cascade.** Les stations du départ attendent la fin du géocodage de l'arrivée (et inversement). Chaque côté peut enchaîner dès que ses propres coordonnées sont connues.
+- [x] ~~**O1 — Requête stations surdimensionnée.** `limit: 30` alors que 3 stations sont affichées par côté.~~ *Écarté après mesure* : 30 stations pèsent ~7 Ko, et au centre de Paris la limite est atteinte (plus de 30 stations dans 1,5 km). La réduire ferait manquer des stations avec vélos quand les plus proches sont vides.
+- [x] ~~**O2 — Appels en cascade.** Les stations de chaque côté pourraient partir dès que ses coordonnées sont connues.~~ *Écarté* : l'itinéraire vélo a besoin des deux points, donc le chemin critique reste « géocodage → itinéraire ». Lancer les stations plus tôt ne raccourcirait pas l'analyse.
 
 ### 🧪 Tests et outillage
 

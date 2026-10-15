@@ -71,6 +71,26 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     await page.screenshot('trajet-velib');
   });
 
+  test('détaille vélos mécaniques et électriques au départ', async () => {
+    const stations = lat => (lat > 48.85
+      ? [velibRecord({ code: 'D1', name: 'Départ mixte', bikes: 12, ebike: 9, dist: 80 })]
+      : [velibRecord({ code: 'A1', docks: 15, dist: 90 })]);
+    page = await browser.openPopup({ api: fakeApi({ stations }) });
+
+    await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    assert.match(await page.text('#departure-stations-list'), /3 mécaniques · 9 électriques/);
+    assert.doesNotMatch(await page.text('#arrival-stations-list'), /mécanique|électrique/);
+  });
+
+  test("itinéraire indisponible : la durée vélo est signalée comme estimée", async () => {
+    page = await browser.openPopup({ api: fakeApi({ route: null }) });
+
+    await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    assert.match(await page.text('#recommendation'), /estimée/);
+  });
+
   test('trajet court : NON, et la marche en alternative, sans doublon', async () => {
     page = await browser.openPopup({ api: fakeApi() });
 
