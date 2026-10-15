@@ -15,7 +15,7 @@ Modules ES : chaque fichier importe explicitement ce qu'il utilise. `lib/` ne to
 
 | Fichier | Rôle |
 |---|---|
-| `manifest.json` | MV3, Chrome ≥ 116 (`AbortSignal.any`) ; permission `geolocation` ; accès réseau aux trois API ; pas de service worker |
+| `manifest.json` | MV3, Chrome ≥ 116 (`AbortSignal.any`) ; permissions `geolocation` et `storage` (dernier trajet) ; accès réseau aux trois API ; pas de service worker |
 | `popup/popup.html` | Interface ; charge `popup.js` en `<script type="module">` |
 | `popup/popup.js` | Événements, autocomplétion, rendu des résultats |
 | `lib/config.js` | Constantes métier (vitesses, seuils, temps de prise/dépose, rayon de recherche) et clé OpenRouteService |
@@ -104,8 +104,8 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 ### 🟢 P2 — Fonctionnalités
 
 - [x] **F1 — Vélos mécaniques et électriques.** L'API fournit `mechanical` et `ebike`, l'interface n'affiche qu'un total.
-- [ ] **F2 — Mémoriser la dernière recherche.** La popup repart de zéro à chaque ouverture.
-- [ ] **F3 — Bouton d'inversion départ ⇄ arrivée** pour le trajet retour.
+- [x] **F2 — Mémoriser la dernière recherche.** La popup repart de zéro à chaque ouverture.
+- [x] **F3 — Bouton d'inversion départ ⇄ arrivée** pour le trajet retour.
 - [x] **F4 — Liste complète des stations dans la popup** (remplace le lien console de Q4).
 
 ### ⚡ P2 — Performances

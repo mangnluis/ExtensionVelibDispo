@@ -28,7 +28,15 @@
       </div>
 
       <div class="input-group">
-        <label for="destination">Destination</label>
+        <div class="label-row">
+          <label for="destination">Destination</label>
+          <button type="button" id="swap-locations" class="text-btn" title="Inverser départ et destination">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>
+            </svg>
+            Inverser
+          </button>
+        </div>
         <input type="text" id="destination" placeholder="Où allez-vous ?" autocomplete="off">
       </div>
 

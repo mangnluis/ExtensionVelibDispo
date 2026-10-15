@@ -28,11 +28,16 @@ const toggleStationsBtn = document.getElementById('toggle-stations');
 const alternativeSection = document.getElementById('alternative-section');
 const alternativeContent = document.getElementById('alternative-content');
 const newSearchBtn = document.getElementById('new-search');
+const swapLocationsBtn = document.getElementById('swap-locations');
 
 /** Nombre de stations listées par côté quand l'utilisateur demande à toutes les voir */
 const MAX_LISTED_STATIONS = 10;
 
-// Coordonnées déjà connues pour un champ (suggestion choisie, géolocalisation) : évite un géocodage
+/** Clé de chrome.storage.local où le dernier trajet est mémorisé d'une ouverture à l'autre */
+const LAST_TRIP_KEY = 'lastTrip';
+
+// Coordonnées déjà connues pour un champ (suggestion choisie, géolocalisation) : évite un géocodage.
+// Valeur : { lat, lng, fromGeolocation }
 const inputCoords = new WeakMap();
 
 // Numéro de l'analyse en cours : une réponse arrivée après une nouvelle recherche est ignorée
@@ -71,10 +76,43 @@ function setBusy(busy) {
 }
 
 function resolveInputCoords(inputElement) {
-  const coords = inputCoords.get(inputElement);
+  const known = inputCoords.get(inputElement);
   // Champ vide : getCoordinates prend la position actuelle
-  return coords ? Promise.resolve(coords) : getCoordinates(inputElement.value.trim());
+  return known ? Promise.resolve({ lat: known.lat, lng: known.lng }) : getCoordinates(inputElement.value.trim());
 }
+
+function setInputCoords(inputElement, coords) {
+  if (coords) {
+    inputCoords.set(inputElement, coords);
+  } else {
+    inputCoords.delete(inputElement);
+  }
+}
+
+/** Champ tel qu'on le mémorise : une position détectée aura changé d'ici la prochaine ouverture */
+function snapshot(inputElement) {
+  const known = inputCoords.get(inputElement);
+  if (known?.fromGeolocation) {
+    return { text: '' };
+  }
+  return { text: inputElement.value.trim(), coords: known && { lat: known.lat, lng: known.lng } };
+}
+
+function rememberTrip() {
+  chrome.storage.local.set({
+    [LAST_TRIP_KEY]: { origin: snapshot(currentLocationInput), destination: snapshot(destinationInput) }
+  });
+}
+
+// La popup se ferme dès qu'elle perd le focus : on reprend le dernier trajet, sans écraser une saisie
+chrome.storage.local.get(LAST_TRIP_KEY).then(({ [LAST_TRIP_KEY]: trip }) => {
+  for (const [inputElement, saved] of [[currentLocationInput, trip?.origin], [destinationInput, trip?.destination]]) {
+    if (saved?.text && !inputElement.value) {
+      inputElement.value = saved.text;
+      setInputCoords(inputElement, saved.coords);
+    }
+  }
+});
 
 // Une adresse introuvable est à préciser ; une panne garde son propre message
 function explainNotFound(message) {
@@ -91,13 +129,14 @@ detectLocationBtn.addEventListener('click', () => {
   getCurrentPosition()
     .then(coords => {
       // Les coordonnées sont gardées : pas besoin de re-géocoder l'adresse lors de l'analyse
+      const known = { ...coords, fromGeolocation: true };
       currentLocationInput.value = 'Position actuelle';
-      inputCoords.set(currentLocationInput, coords);
+      inputCoords.set(currentLocationInput, known);
 
       // Adresse lisible, uniquement pour l'affichage ; à défaut « Position actuelle » suffit
       reverseGeocode(coords.lat, coords.lng)
         .then(address => {
-          if (inputCoords.get(currentLocationInput) === coords) {
+          if (inputCoords.get(currentLocationInput) === known) {
             currentLocationInput.value = address;
           }
         })
@@ -117,6 +156,7 @@ tripForm.addEventListener('submit', event => {
     return;
   }
 
+  rememberTrip();
   const analysisId = ++currentAnalysis;
   setBusy(true);
   setVisible(resultSection, false);
@@ -149,7 +189,19 @@ newSearchBtn.addEventListener('click', () => {
   clearError();
   destinationInput.value = '';
   inputCoords.delete(destinationInput);
+  rememberTrip();
   destinationInput.focus();
+});
+
+// Trajet retour : départ et destination échangent leur texte et leurs coordonnées
+swapLocationsBtn.addEventListener('click', () => {
+  const origin = { text: currentLocationInput.value, coords: inputCoords.get(currentLocationInput) };
+  const destination = { text: destinationInput.value, coords: inputCoords.get(destinationInput) };
+  currentLocationInput.value = destination.text;
+  setInputCoords(currentLocationInput, destination.coords);
+  destinationInput.value = origin.text;
+  setInputCoords(destinationInput, origin.coords);
+  clearError();
 });
 
 function renderResult(result) {
@@ -301,7 +353,7 @@ function setupAutocomplete(inputElement) {
 
   function select(suggestion) {
     inputElement.value = suggestion.display_name;
-    inputCoords.set(inputElement, { lat: suggestion.lat, lng: suggestion.lng });
+    setInputCoords(inputElement, { lat: suggestion.lat, lng: suggestion.lng });
     close();
   }
 

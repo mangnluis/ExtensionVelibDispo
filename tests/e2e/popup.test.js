@@ -354,6 +354,75 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     });
   });
 
+  describe('dernier trajet mémorisé', () => {
+    const stationQueries = () => page.requests
+      .filter(request => request.url.includes('opendata.paris.fr'))
+      .map(request => new URL(request.url).searchParams.get('where'));
+
+    test("est restauré à l'ouverture suivante", async () => {
+      page = await browser.openPopup({ api: fakeApi() });
+      await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+      const saved = await page.evaluate(() => chrome.storage.local.get('lastTrip'));
+      await page.close();
+
+      page = await browser.openPopup({ api: fakeApi(), storage: saved });
+      await page.waitFor(() => document.getElementById('destination').value !== '');
+
+      assert.equal(await page.evaluate(() => document.getElementById('current-location').value), asText(HOTEL_DE_VILLE));
+      assert.equal(await page.evaluate(() => document.getElementById('destination').value), asText(GARE_DE_LYON));
+    });
+
+    test("garde les coordonnées d'une suggestion choisie : pas de nouveau géocodage", async () => {
+      const storage = {
+        lastTrip: {
+          origin: { text: asText(HOTEL_DE_VILLE) },
+          destination: { text: 'Bastille (station de métro) 75004 Paris', coords: { lat: 48.8531, lng: 2.3691 } }
+        }
+      };
+      page = await browser.openPopup({ api: fakeApi(), storage });
+      await page.waitFor(() => document.getElementById('destination').value !== '');
+
+      await page.click('#analyze-btn');
+      await waitForOutcome();
+
+      assert.equal(page.requests.filter(request => request.url.includes('geocodage/search')).length, 0);
+      assert.ok(stationQueries().some(where => where.includes('POINT(2.3691 48.8531)')));
+    });
+
+    test("ne mémorise pas une position détectée, qui aura changé d'ici la prochaine fois", async () => {
+      page = await browser.openPopup({ api: fakeApi() });
+      await page.click('#detect-location');
+      await page.waitFor(() => document.getElementById('current-location').value.includes('Paris'));
+      await page.fill('#destination', asText(GARE_DE_LYON));
+      await page.click('#analyze-btn');
+      await waitForOutcome();
+
+      const { lastTrip } = await page.evaluate(() => chrome.storage.local.get('lastTrip'));
+
+      assert.equal(lastTrip.origin.text, '');
+      assert.equal(lastTrip.destination.text, asText(GARE_DE_LYON));
+    });
+  });
+
+  test('« Inverser » échange départ et destination, coordonnées comprises', async () => {
+    page = await browser.openPopup({ api: fakeApi({ addresses: [poiFeature({ name: 'Bastille', lat: 48.8531, lng: 2.3691, postcode: '75004' })] }) });
+    await page.fill('#current-location', asText(GARE_DE_LYON));
+    await page.type('#destination', 'bastille');
+    await page.waitFor(() => !document.getElementById('destination-suggestions').classList.contains('hidden'));
+    await page.press('ArrowDown');
+    await page.press('Enter');
+
+    await page.click('#swap-locations');
+
+    assert.equal(await page.evaluate(() => document.getElementById('current-location').value), 'Bastille (station de métro) 75004 Paris');
+    assert.equal(await page.evaluate(() => document.getElementById('destination').value), asText(GARE_DE_LYON));
+    await page.click('#analyze-btn');
+    await waitForOutcome();
+    const firstStationQuery = page.requests.find(request => request.url.includes('opendata.paris.fr'));
+    assert.match(new URL(firstStationQuery.url).searchParams.get('where'), /POINT\(2\.3691 48\.8531\)/, 'départ = coordonnées de la suggestion');
+    await page.screenshot('inversion');
+  });
+
   test('destination manquante : demande de la saisir, dans la popup', async () => {
     page = await browser.openPopup({ api: fakeApi() });
 

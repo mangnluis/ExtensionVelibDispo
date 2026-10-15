@@ -350,8 +350,9 @@ export async function launchBrowser(chromePath = findChrome()) {
      * @param {Function} [options.api] - (requête) => réponse simulée { status, body } | { error } | undefined
      * @param {{lat: number, lng: number}|null} [options.position] - position renvoyée par la géolocalisation ;
      *   null : position indisponible
+     * @param {Object} [options.storage] - contenu de chrome.storage.local à l'ouverture (vide par défaut)
      */
-    async openPopup({ api, position = { lat: 48.856614, lng: 2.3522219 } } = {}) {
+    async openPopup({ api, position = { lat: 48.856614, lng: 2.3522219 }, storage = {} } = {}) {
       const { targetId } = await connection.send('Target.createTarget', { url: 'about:blank' });
       const { sessionId } = await connection.send('Target.attachToTarget', { targetId, flatten: true });
       const page = new Page(connection, targetId, sessionId, api);
@@ -364,9 +365,20 @@ export async function launchBrowser(chromePath = findChrome()) {
         position ? { latitude: position.lat, longitude: position.lng, accuracy: 20 } : {});
       await page.send('Emulation.setDeviceMetricsOverride', { width: POPUP_WIDTH, height: 600, deviceScaleFactor: 1, mobile: false });
 
-      const loaded = page.waitForEvent('Page.loadEventFired');
-      await page.send('Page.navigate', { url: `chrome-extension://${extensionId}/popup/popup.html` });
-      await loaded;
+      const load = async action => {
+        const loaded = page.waitForEvent('Page.loadEventFired');
+        await action();
+        await loaded;
+      };
+      await load(() => page.send('Page.navigate', { url: `chrome-extension://${extensionId}/popup/popup.html` }));
+
+      // Le stockage de l'extension survit d'un onglet à l'autre : on le fixe, puis on recharge
+      // pour que la popup démarre avec ce contenu
+      await page.evaluate(async data => {
+        await chrome.storage.local.clear();
+        await chrome.storage.local.set(data);
+      }, storage);
+      await load(() => page.send('Page.reload'));
       return page;
     },
 
