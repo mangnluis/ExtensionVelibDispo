@@ -64,9 +64,9 @@ describe('getNearbyVelibStations', () => {
       lat: 48.8562,
       lng: 2.3532,
       distance: 87.7,
-      distanceText: '88 m',
+      distanceText: '88\u00a0m',
       walkDuration: 73,
-      durationText: '1 min'
+      durationText: '1\u00a0min'
     }]);
   });
 

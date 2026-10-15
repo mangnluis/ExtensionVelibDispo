@@ -1,449 +1,302 @@
 import {
   AddressNotFoundError,
   getCoordinates,
-  getNearbyVelibStations,
   reverseGeocode,
   searchAddresses
 } from '../lib/api.js';
 import { analyzeVelibJourney } from '../lib/decision.js';
 import { getCurrentPosition } from '../lib/geo.js';
-import { debounce, escapeHtml } from '../lib/utils.js';
+import { debounce } from '../lib/utils.js';
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Éléments de l'interface
-    const currentLocationInput = document.getElementById('current-location');
-    const destinationInput = document.getElementById('destination');
-    const detectLocationBtn = document.getElementById('detect-location');
-    const analyzeBtn = document.getElementById('analyze-btn');
-    const loadingSection = document.getElementById('loading');
-    const resultSection = document.getElementById('result-section');
-    const recommendationDiv = document.getElementById('recommendation');
-    const stationsList = document.getElementById('stations-list');
-    const departureStationsList = document.getElementById('departure-stations-list');
-    const arrivalStationsList = document.getElementById('arrival-stations-list');
-    const alternativeSection = document.getElementById('alternative-section');
-    const alternativeContent = document.getElementById('alternative-content');
-    const newSearchBtn = document.getElementById('new-search');
-    
-    // Coordonnées déjà connues pour un champ (évite un géocodage supplémentaire)
-    const inputCoords = new WeakMap();
+// Module chargé en fin de page : le DOM est déjà analysé
 
-    function setInputCoords(inputElement, coords) {
-      inputCoords.set(inputElement, coords);
-    }
+const currentLocationInput = document.getElementById('current-location');
+const destinationInput = document.getElementById('destination');
+const detectLocationBtn = document.getElementById('detect-location');
+const analyzeBtn = document.getElementById('analyze-btn');
+const errorMessage = document.getElementById('error-message');
+const loadingSection = document.getElementById('loading');
+const resultSection = document.getElementById('result-section');
+const recommendationDiv = document.getElementById('recommendation');
+const stationsList = document.getElementById('stations-list');
+const departureStationsBlock = document.querySelector('.departure-stations');
+const arrivalStationsBlock = document.querySelector('.arrival-stations');
+const departureStationsList = document.getElementById('departure-stations-list');
+const arrivalStationsList = document.getElementById('arrival-stations-list');
+const toggleStationsBtn = document.getElementById('toggle-stations');
+const alternativeSection = document.getElementById('alternative-section');
+const alternativeContent = document.getElementById('alternative-content');
+const newSearchBtn = document.getElementById('new-search');
 
-    function getInputCoords(inputElement) {
-      return inputCoords.get(inputElement);
-    }
+/** Nombre de stations listées par côté quand l'utilisateur demande à toutes les voir */
+const MAX_LISTED_STATIONS = 10;
 
-    function resolveInputCoords(inputElement, fallback) {
-      const coords = getInputCoords(inputElement);
-      if (coords) {
-        return Promise.resolve(coords);
-      }
-      return getCoordinates(inputElement.value || fallback);
-    }
+// Coordonnées déjà connues pour un champ (suggestion choisie, géolocalisation) : évite un géocodage
+const inputCoords = new WeakMap();
 
-    // Création des éléments d'autocomplétion
-    const currentLocationSuggestions = createAutocompleteContainer(currentLocationInput);
-    const destinationSuggestions = createAutocompleteContainer(destinationInput);
-    
-    // Ajouter des écouteurs pour l'autocomplétion
-    setupAutocomplete(currentLocationInput, currentLocationSuggestions);
-    setupAutocomplete(destinationInput, destinationSuggestions);
+// Numéro de l'analyse en cours : une réponse arrivée après une nouvelle recherche est ignorée
+let currentAnalysis = 0;
 
-    // Détection de la position actuelle
-    detectLocationBtn.addEventListener('click', function() {
-      loadingSection.classList.remove('hidden');
+function createElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) {
+    element.className = className;
+  }
+  if (text !== undefined) {
+    element.textContent = text;
+  }
+  return element;
+}
 
-      getCurrentPosition()
-        .then(coords => {
-          // Les coordonnées sont gardées : pas besoin de re-géocoder l'adresse lors de l'analyse
-          currentLocationInput.value = 'Position actuelle';
-          setInputCoords(currentLocationInput, coords);
-          loadingSection.classList.add('hidden');
+function setVisible(element, visible) {
+  element.classList.toggle('hidden', !visible);
+}
 
-          // Adresse lisible, uniquement pour l'affichage
-          reverseGeocode(coords.lat, coords.lng)
-            .then(address => {
-              if (getInputCoords(currentLocationInput) === coords) {
-                currentLocationInput.value = address;
-              }
-            })
-            .catch(error => console.error('Erreur de géocodage inverse:', error));
+function showError(message) {
+  errorMessage.textContent = message;
+  setVisible(errorMessage, true);
+}
+
+function clearError() {
+  errorMessage.textContent = '';
+  setVisible(errorMessage, false);
+}
+
+/** Pendant un calcul : indicateur de chargement, boutons désactivés (pas de double analyse) */
+function setBusy(busy) {
+  setVisible(loadingSection, busy);
+  analyzeBtn.disabled = busy;
+  detectLocationBtn.disabled = busy;
+}
+
+function resolveInputCoords(inputElement) {
+  const coords = inputCoords.get(inputElement);
+  // Champ vide : getCoordinates prend la position actuelle
+  return coords ? Promise.resolve(coords) : getCoordinates(inputElement.value.trim());
+}
+
+// Une adresse introuvable est à préciser ; une panne garde son propre message
+function explainNotFound(message) {
+  return error => {
+    throw error instanceof AddressNotFoundError ? new Error(message) : error;
+  };
+}
+
+// Détection de la position actuelle
+detectLocationBtn.addEventListener('click', () => {
+  clearError();
+  setBusy(true);
+
+  getCurrentPosition()
+    .then(coords => {
+      // Les coordonnées sont gardées : pas besoin de re-géocoder l'adresse lors de l'analyse
+      currentLocationInput.value = 'Position actuelle';
+      inputCoords.set(currentLocationInput, coords);
+
+      // Adresse lisible, uniquement pour l'affichage ; à défaut « Position actuelle » suffit
+      reverseGeocode(coords.lat, coords.lng)
+        .then(address => {
+          if (inputCoords.get(currentLocationInput) === coords) {
+            currentLocationInput.value = address;
+          }
         })
-        .catch(error => {
-          loadingSection.classList.add('hidden');
-          alert('Impossible de détecter votre position. Veuillez l\'entrer manuellement.');
-          console.error('Erreur de géolocalisation:', error);
-        });
-    });
+        .catch(() => {});
+    })
+    .catch(() => showError("Impossible de détecter votre position. Saisissez l'adresse de départ."))
+    .finally(() => setBusy(false));
+});
 
-    // Analyse du trajet
-    analyzeBtn.addEventListener('click', function() {
-      // Vérifier si les champs sont remplis
-      if (!destinationInput.value) {
-        alert('Veuillez entrer une destination');
+// Analyse du trajet
+analyzeBtn.addEventListener('click', () => {
+  clearError();
+  if (!destinationInput.value.trim()) {
+    showError('Veuillez entrer une destination.');
+    destinationInput.focus();
+    return;
+  }
+
+  const analysisId = ++currentAnalysis;
+  setBusy(true);
+  setVisible(resultSection, false);
+
+  Promise.all([
+    resolveInputCoords(currentLocationInput)
+      .catch(explainNotFound("L'adresse de départ n'a pas pu être localisée. Veuillez la préciser.")),
+    resolveInputCoords(destinationInput)
+      .catch(explainNotFound("L'adresse de destination n'a pas pu être localisée. Veuillez la préciser."))
+  ])
+    .then(([origin, destination]) => analyzeVelibJourney(origin, destination))
+    .then(result => {
+      if (analysisId === currentAnalysis) {
+        renderResult(result);
+        setVisible(resultSection, true);
+      }
+    })
+    .catch(error => {
+      if (analysisId === currentAnalysis) {
+        showError(error.message);
+      }
+    })
+    .finally(() => setBusy(false));
+});
+
+// Nouvelle recherche : on garde le départ (souvent la position actuelle), on repart d'une destination vide
+newSearchBtn.addEventListener('click', () => {
+  currentAnalysis++;
+  setVisible(resultSection, false);
+  clearError();
+  destinationInput.value = '';
+  inputCoords.delete(destinationInput);
+  destinationInput.focus();
+});
+
+function renderResult(result) {
+  renderRecommendation(result);
+  renderStations(result, false);
+  renderAlternative(result);
+}
+
+function renderRecommendation({ recommendation, reason, alternative }) {
+  const card = createElement('div', recommendation ? 'result-yes' : 'result-no');
+  card.append(
+    createElement('p', `decision-text ${recommendation ? 'decision-yes' : 'decision-no'}`,
+      recommendation ? 'OUI, prenez un Vélib' : 'NON, évitez le Vélib'),
+    createElement('p', 'decision-details', reason)
+  );
+  // Quand le Vélib l'emporte, l'alternative n'a pas de section à elle : on la rappelle ici
+  if (recommendation && alternative) {
+    card.append(createElement('p', 'decision-details', `Alternative : ${alternative.mode} (${alternative.durationText})`));
+  }
+  recommendationDiv.replaceChildren(card);
+}
+
+/**
+ * Stations retenues, ou toutes les stations en service trouvées autour de chaque point
+ * (les plus proches d'abord) quand `expanded` est vrai
+ */
+function renderStations(result, expanded) {
+  const nearest = stations => [...(stations || [])]
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, MAX_LISTED_STATIONS);
+  const departure = expanded ? nearest(result.allDepartureStations) : result.departureStations || [];
+  const arrival = expanded ? nearest(result.allArrivalStations) : result.arrivalStations || [];
+
+  fillStationList(departureStationsList, departure, 'bikes');
+  fillStationList(arrivalStationsList, arrival, 'docks');
+  setVisible(departureStationsBlock, departure.length > 0);
+  setVisible(arrivalStationsBlock, arrival.length > 0);
+  setVisible(stationsList, departure.length > 0 || arrival.length > 0);
+
+  const hiddenStations = nearest(result.allDepartureStations).length > departure.length ||
+    nearest(result.allArrivalStations).length > arrival.length;
+  setVisible(toggleStationsBtn, expanded || hiddenStations);
+  toggleStationsBtn.textContent = expanded ? 'Revenir aux stations conseillées' : 'Voir toutes les stations proches';
+  toggleStationsBtn.onclick = () => renderStations(result, !expanded);
+}
+
+const AVAILABILITY_TEXT = {
+  bikes: count => (count === 0 ? 'Aucun vélo' : `${count} vélo${count > 1 ? 's' : ''} disponible${count > 1 ? 's' : ''}`),
+  docks: count => (count === 0 ? 'Aucune place' : `${count} place${count > 1 ? 's' : ''} disponible${count > 1 ? 's' : ''}`)
+};
+
+function getAvailabilityClass(count) {
+  if (count >= 5) return 'good-availability';
+  if (count >= 1) return 'low-availability';
+  return 'no-availability';
+}
+
+/** @param {'bikes'|'docks'} key - disponibilité affichée : vélos au départ, places à l'arrivée */
+function fillStationList(listElement, stations, key) {
+  listElement.replaceChildren(...stations.map(station => {
+    const details = createElement('div', 'station-details');
+    details.append(
+      createElement('span', '', `${station.distanceText} (${station.durationText})`),
+      createElement('span', `availability ${getAvailabilityClass(station[key])}`, AVAILABILITY_TEXT[key](station[key]))
+    );
+
+    const item = createElement('li', 'station-item');
+    item.append(createElement('p', 'station-name', station.name), details);
+    return item;
+  }));
+}
+
+function renderAlternative({ recommendation, alternative }) {
+  const visible = !recommendation && Boolean(alternative);
+  setVisible(alternativeSection, visible);
+  if (!visible) {
+    return;
+  }
+
+  const item = createElement('div', 'alternative-item');
+  item.append(
+    createElement('p', 'alternative-name', alternative.mode),
+    createElement('p', 'alternative-detail', `Durée estimée : ${alternative.durationText}`)
+  );
+  if (alternative.details) {
+    item.append(createElement('p', 'alternative-breakdown', alternative.details));
+  }
+  if (alternative.description) {
+    item.append(createElement('p', 'alternative-description', alternative.description));
+  }
+  alternativeContent.replaceChildren(item);
+}
+
+// Autocomplétion des adresses
+setupAutocomplete(currentLocationInput, createAutocompleteContainer(currentLocationInput));
+setupAutocomplete(destinationInput, createAutocompleteContainer(destinationInput));
+
+function createAutocompleteContainer(inputElement) {
+  const container = createElement('div', 'autocomplete-suggestions hidden');
+  inputElement.parentNode.insertBefore(container, inputElement.nextSibling);
+  return container;
+}
+
+function setupAutocomplete(inputElement, suggestionsContainer) {
+  let pendingSearch = null;
+
+  // Debounce pour limiter les requêtes pendant la frappe
+  const debouncedSearch = debounce(searchText => {
+    // Annuler la recherche précédente : sa réponse n'est plus utile
+    if (pendingSearch) {
+      pendingSearch.abort();
+    }
+
+    if (searchText.length < 3) {
+      setVisible(suggestionsContainer, false);
+      return;
+    }
+
+    const controller = new AbortController();
+    pendingSearch = controller;
+
+    searchAddresses(searchText, controller.signal).then(suggestions => {
+      if (controller.signal.aborted) {
         return;
       }
 
-      loadingSection.classList.remove('hidden');
-      resultSection.classList.add('hidden');
-      
-      // Une adresse introuvable est à préciser ; une panne garde son propre message
-      const explainNotFound = message => error => {
-        throw error instanceof AddressNotFoundError ? new Error(message) : error;
-      };
-
-      // Réutiliser les coordonnées connues (suggestion choisie, géolocalisation) sinon géocoder
-      Promise.all([
-        resolveInputCoords(currentLocationInput, 'Ma position')
-          .catch(explainNotFound("L'adresse de départ n'a pas pu être localisée. Veuillez la préciser.")),
-        resolveInputCoords(destinationInput)
-          .catch(explainNotFound("L'adresse de destination n'a pas pu être localisée. Veuillez la préciser."))
-      ])
-        .then(([originCoords, destCoords]) => {
-          // Vérifier si les coordonnées sont valides
-          if (!originCoords || !originCoords.lat || !originCoords.lng) {
-            throw new Error("L'adresse de départ n'a pas pu être localisée. Veuillez la préciser.");
-          }
-          if (!destCoords || !destCoords.lat || !destCoords.lng) {
-            throw new Error("L'adresse de destination n'a pas pu être localisée. Veuillez la préciser.");
-          }
-          
-          // Afficher les coordonnées en console pour debug
-          console.log("Coordonnées origine:", originCoords);
-          console.log("Coordonnées destination:", destCoords);
-          
-          return [originCoords, destCoords];
-        })
-        .then(([originCoords, destCoords]) => {
-          // Analyser la faisabilité en Vélib
-          return analyzeVelibJourney(originCoords, destCoords);
-        })
-        .then(result => {
-          console.log("Résultat de l'analyse:", result);
-          
-          // Vérifier que le résultat est bien formaté
-          if (!result || typeof result.recommendation !== 'boolean') {
-            throw new Error("Le résultat de l'analyse est invalide.");
-          }
-          
-          displayResults(result);
-          loadingSection.classList.add('hidden');
-          resultSection.classList.remove('hidden');
-        })
-        .catch(error => {
-          console.error('Erreur lors de l\'analyse:', error);
-          loadingSection.classList.add('hidden');
-          
-          // Message d'erreur plus précis
-          let errorMessage = 'Une erreur s\'est produite lors de l\'analyse.';
-          if (error && error.message) {
-            errorMessage += ' ' + error.message;
-          }
-          
-          alert(errorMessage);
+      suggestionsContainer.replaceChildren(...suggestions.map(suggestion => {
+        const item = createElement('div', 'suggestion-item', suggestion.display_name);
+        item.addEventListener('click', () => {
+          inputElement.value = suggestion.display_name;
+          inputCoords.set(inputElement, { lat: suggestion.lat, lng: suggestion.lng });
+          setVisible(suggestionsContainer, false);
         });
+        return item;
+      }));
+      setVisible(suggestionsContainer, suggestions.length > 0);
     });
+  }, 250);
 
-    // Afficher les résultats
-    function displayResults(result) {
-      // Cacher le loader
-      loadingSection.classList.add('hidden');  // ✅ Utiliser loadingSection comme défini au début du script
-      
-      // Afficher la recommandation principale
-      let recommendationHTML = '';
-      if (result.recommendation) {
-        recommendationHTML = `
-          <div class="result-yes">
-            <p class="decision-text decision-yes">OUI, prenez un Vélib</p>
-            <p class="decision-details">
-              ${escapeHtml(result.reason)}<br>
-              ${result.alternative ? 'Alternative: ' + escapeHtml(result.alternative.mode) + ' (' + result.alternative.durationText + ')' : ''}
-            </p>
-          </div>
-        `;
-      } else {
-        recommendationHTML = `
-          <div class="result-no">
-            <p class="decision-text decision-no">NON, évitez le Vélib</p>
-            <p class="decision-details">
-              ${escapeHtml(result.reason)}<br>
-              ${result.alternative ? 'Alternative: ' + escapeHtml(result.alternative.mode) + ' (' + result.alternative.durationText + ')' : ''}
-            </p>
-          </div>
-        `;
-      }
-      recommendationDiv.innerHTML = recommendationHTML;  // ✅ Utiliser recommendationDiv comme défini au début
-      
-      // MODIFICATION: Toujours afficher les stations s'il y en a, peu importe la recommandation
-      if ((result.departureStations && result.departureStations.length > 0) || 
-          (result.arrivalStations && result.arrivalStations.length > 0)) {
-        
-        // Afficher les stations de départ
-        departureStationsList.innerHTML = '';
-        
-        if (result.departureStations && result.departureStations.length > 0) {
-          result.departureStations.forEach(station => {
-            const stationItem = document.createElement('li');
-            stationItem.className = 'station-item';
-            stationItem.innerHTML = `
-              <p class="station-name">${escapeHtml(station.name)}</p>
-              <div class="station-details">
-                <span>${station.distanceText} (${station.durationText})</span>
-                <span class="availability ${getAvailabilityClass(station.bikes)}">
-                  ${station.bikes} vélos disponibles
-                </span>
-              </div>
-            `;
-            departureStationsList.appendChild(stationItem);
-          });
-          document.querySelector('.departure-stations').classList.remove('hidden');
-        } else {
-          document.querySelector('.departure-stations').classList.add('hidden');
-        }
-        
-        // Afficher les stations d'arrivée
-        arrivalStationsList.innerHTML = '';
-        
-        if (result.arrivalStations && result.arrivalStations.length > 0) {
-          result.arrivalStations.forEach(station => {
-            const stationItem = document.createElement('li');
-            stationItem.className = 'station-item';
-            stationItem.innerHTML = `
-              <p class="station-name">${escapeHtml(station.name)}</p>
-              <div class="station-details">
-                <span>${station.distanceText} (${station.durationText})</span>
-                <span class="availability ${getAvailabilityClass(station.docks)}">
-                  ${station.docks} places disponibles
-                </span>
-              </div>
-            `;
-            arrivalStationsList.appendChild(stationItem);
-          });
-          document.querySelector('.arrival-stations').classList.remove('hidden');
-        } else {
-          document.querySelector('.arrival-stations').classList.add('hidden');
-        }
-        
-        stationsList.classList.remove('hidden');
-      } else {
-        stationsList.classList.add('hidden');
-      }
-      
-      // Afficher l'alternative si nécessaire
-      if (!result.recommendation) {
-        // Afficher les alternatives
-        if (result.alternative) {
-          let alternativeHTML = `
-            <div class="alternative-item">
-              <p class="alternative-name">${escapeHtml(result.alternative.mode)}</p>
-              <p class="alternative-detail">
-                Durée estimée: ${result.alternative.durationText}
-              </p>`;
-        
-          // Ajouter les détails sur le temps de marche et d'attente si disponibles
-          if (result.alternative.details) {
-            alternativeHTML += `<p class="alternative-breakdown">${result.alternative.details}</p>`;
-          }
-          
-          alternativeHTML += `
-              <p>${escapeHtml(result.alternative.description)}</p>
-            </div>
-          `;
-          
-          alternativeContent.innerHTML = alternativeHTML;
-          alternativeSection.classList.remove('hidden');
-        } else {
-          alternativeSection.classList.add('hidden');
-        }
-      } else {
-        alternativeSection.classList.add('hidden');
-      }
-      
-      // Afficher la section des résultats
-      resultSection.classList.remove('hidden');
-      
-      // Ajout d'un lien pour voir toutes les stations trouvées dans la console
-      const previousLink = stationsList.querySelector('.show-all-stations');
-      if (previousLink) {
-        previousLink.remove();
-      }
+  inputElement.addEventListener('input', () => {
+    // Le texte a changé : les coordonnées mémorisées ne correspondent plus
+    inputCoords.delete(inputElement);
+    debouncedSearch(inputElement.value);
+  });
 
-      if (result.allDepartureStations && result.allDepartureStations.length > 0 ||
-          result.allArrivalStations && result.allArrivalStations.length > 0) {
-        
-        const showAllStationsLink = document.createElement('a');
-        showAllStationsLink.href = "#";
-        showAllStationsLink.className = "show-all-stations";
-        showAllStationsLink.textContent = "Voir toutes les stations trouvées";
-        showAllStationsLink.addEventListener('click', function(e) {
-          e.preventDefault();
-          console.log("Toutes les stations de départ trouvées:", result.allDepartureStations || []);
-          console.log("Toutes les stations d'arrivée trouvées:", result.allArrivalStations || []);
-          
-          // Réordonner les stations par distance
-          const allDepartureByDistance = [...(result.allDepartureStations || [])].sort((a, b) => a.distance - b.distance);
-          const allArrivalByDistance = [...(result.allArrivalStations || [])].sort((a, b) => a.distance - b.distance);
-          
-          // Afficher les 10 plus proches
-          console.table(allDepartureByDistance.slice(0, 10).map(s => ({
-            nom: s.name,
-            distance: s.distanceText,
-            temps: s.durationText,
-            vélos: s.bikes
-          })));
-          
-          console.table(allArrivalByDistance.slice(0, 10).map(s => ({
-            nom: s.name,
-            distance: s.distanceText,
-            temps: s.durationText,
-            places: s.docks
-          })));
-          
-          alert("Liste complète des stations affichée dans la console (F12)");
-        });
-        
-        stationsList.appendChild(showAllStationsLink);
-      }
+  // Masquer les suggestions lors d'un clic ailleurs
+  document.addEventListener('click', event => {
+    if (event.target !== inputElement) {
+      setVisible(suggestionsContainer, false);
     }
-
-    // Utilitaire pour déterminer la classe CSS selon la disponibilité
-    function getAvailabilityClass(count) {
-      if (count >= 5) return 'good-availability';
-      if (count >= 1) return 'low-availability';
-      return 'no-availability';
-    }
-
-    // Reset pour nouvelle recherche
-    newSearchBtn.addEventListener('click', function() {
-      resultSection.classList.add('hidden');
-    });
-    
-    // Fonctions d'autocomplétion
-    function createAutocompleteContainer(inputElement) {
-      const container = document.createElement('div');
-      container.className = 'autocomplete-suggestions hidden';
-      inputElement.parentNode.insertBefore(container, inputElement.nextSibling);
-      return container;
-    }
-    
-    function setupAutocomplete(inputElement, suggestionsContainer) {
-      let pendingSearch = null;
-
-      // Debounce pour limiter les requêtes pendant la frappe
-      const debouncedSearch = debounce(function(searchText) {
-        // Annuler la recherche précédente : sa réponse n'est plus utile
-        if (pendingSearch) {
-          pendingSearch.abort();
-        }
-
-        if (searchText.length < 3) {
-          suggestionsContainer.classList.add('hidden');
-          return;
-        }
-
-        const controller = new AbortController();
-        pendingSearch = controller;
-
-        // Rechercher des suggestions d'adresses
-        searchAddresses(searchText, controller.signal)
-          .then(suggestions => {
-            if (controller.signal.aborted) {
-              return;
-            }
-
-            // Vider et remplir le conteneur de suggestions
-            suggestionsContainer.innerHTML = '';
-            suggestions.forEach(suggestion => {
-              const item = document.createElement('div');
-              item.className = 'suggestion-item';
-              item.textContent = suggestion.display_name;
-              
-              item.addEventListener('click', function() {
-                inputElement.value = suggestion.display_name;
-                setInputCoords(inputElement, { lat: suggestion.lat, lng: suggestion.lng });
-                suggestionsContainer.classList.add('hidden');
-              });
-              
-              suggestionsContainer.appendChild(item);
-            });
-            
-            if (suggestions.length > 0) {
-              suggestionsContainer.classList.remove('hidden');
-            } else {
-              suggestionsContainer.classList.add('hidden');
-            }
-          })
-          .catch(error => {
-            console.error('Erreur lors de la recherche d\'adresses:', error);
-          });
-      }, 250);
-
-      // Écouter la saisie dans le champ
-      inputElement.addEventListener('input', function() {
-        // Le texte a changé : les coordonnées mémorisées ne correspondent plus
-        inputCoords.delete(inputElement);
-        debouncedSearch(this.value);
-      });
-      
-      // Masquer les suggestions lors du clic ailleurs
-      document.addEventListener('click', function(event) {
-        if (event.target !== inputElement) {
-          suggestionsContainer.classList.add('hidden');
-        }
-      });
-    }
-
-    // Fonction de débogage pour vérifier les stations près d'une adresse
-    function debugCheckStations() {
-      const debugButton = document.createElement('button');
-      debugButton.textContent = '🔍 Vérifier les stations';
-      debugButton.classList.add('secondary-btn');
-      debugButton.style.marginTop = '10px';
-      
-      debugButton.addEventListener('click', function() {
-        const locationInput = currentLocationInput.value;
-        if (!locationInput) {
-          alert("Veuillez entrer une adresse de départ");
-          return;
-        }
-        
-        loadingSection.classList.remove('hidden');
-        
-        getCoordinates(locationInput)
-          .then(coords => {
-            return getNearbyVelibStations(coords, 1500);
-          })
-          .then(stations => {
-            loadingSection.classList.add('hidden');
-            
-            if (!stations || stations.length === 0) {
-              alert("Aucune station trouvée près de cette adresse dans un rayon de 1500m");
-              return;
-            }
-            
-            // Afficher les stations
-            const stationsInfo = stations
-              .map(s => `${s.name}: ${s.bikes} vélos, ${s.docks} places (à ${s.distanceText})`)
-              .join('\n');
-              
-            console.log("Stations trouvées:", stations);
-            alert(`${stations.length} stations trouvées près de ${locationInput}:\n${stationsInfo}`);
-          })
-          .catch(error => {
-            loadingSection.classList.add('hidden');
-            alert(`Erreur: ${error.message}`);
-          });
-      });
-      
-      // Ajouter le bouton en bas de l'interface
-      document.querySelector('footer').insertAdjacentElement('beforebegin', debugButton);
-    }
-
-    // Activer le mode debug en environnement de développement
-    if (location.hostname === 'localhost' || chrome.runtime.id === 'ggpjhpnddgcmbmjhilikiomlfjeecggf') {
-      debugCheckStations();
-    }
-});
+  });
+}

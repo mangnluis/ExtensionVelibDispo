@@ -302,7 +302,8 @@ export async function launchBrowser(chromePath = findChrome()) {
      * Ouvre la popup dans un onglet.
      * @param {Object} [options]
      * @param {Function} [options.api] - (requête) => réponse simulée { status, body } | { error } | undefined
-     * @param {{lat: number, lng: number}} [options.position] - position renvoyée par la géolocalisation
+     * @param {{lat: number, lng: number}|null} [options.position] - position renvoyée par la géolocalisation ;
+     *   null : position indisponible
      */
     async openPopup({ api, position = { lat: 48.856614, lng: 2.3522219 } } = {}) {
       const { targetId } = await connection.send('Target.createTarget', { url: 'about:blank' });
@@ -312,7 +313,9 @@ export async function launchBrowser(chromePath = findChrome()) {
       await page.send('Page.enable');
       await page.send('Runtime.enable');
       await page.send('Fetch.enable', { patterns: [{ urlPattern: 'https://*' }] });
-      await page.send('Emulation.setGeolocationOverride', { latitude: position.lat, longitude: position.lng, accuracy: 20 });
+      // Sans coordonnées, Chrome simule une position indisponible
+      await page.send('Emulation.setGeolocationOverride',
+        position ? { latitude: position.lat, longitude: position.lng, accuracy: 20 } : {});
       await page.send('Emulation.setDeviceMetricsOverride', { width: POPUP_WIDTH, height: 600, deviceScaleFactor: 1, mobile: false });
 
       const loaded = page.waitForEvent('Page.loadEventFired');

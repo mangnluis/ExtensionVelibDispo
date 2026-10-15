@@ -1,5 +1,6 @@
 import { after, afterEach, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { velibRecord } from '../helpers.js';
 import { findChrome, launchBrowser } from './browser.js';
 import { fakeApi, GARE_DE_LYON, HOTEL_DE_VILLE } from './fake-api.js';
 
@@ -23,18 +24,23 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     await browser?.close();
   });
 
-  /** Lance l'analyse et attend le résultat (ou une alerte) */
-  async function analyze(origin, destination, timeout = 5000) {
+  async function fillTrip(origin, destination) {
     await page.fill('#current-location', asText(origin));
     await page.fill('#destination', asText(destination));
+  }
+
+  /** Attend la fin de l'analyse : résultat ou message d'erreur affiché */
+  function waitForOutcome(timeout = 5000) {
+    return page.waitFor(() => {
+      const visible = id => !document.getElementById(id).classList.contains('hidden');
+      return visible('result-section') || visible('error-message');
+    }, { timeout });
+  }
+
+  async function analyze(origin, destination, timeout) {
+    await fillTrip(origin, destination);
     await page.click('#analyze-btn');
-    const deadline = Date.now() + timeout;
-    while (!page.dialogs.length && !(await page.isVisible('#result-section'))) {
-      if (Date.now() > deadline) {
-        throw new Error("Pas de résultat d'analyse");
-      }
-      await new Promise(done => setTimeout(done, 50));
-    }
+    await waitForOutcome(timeout);
   }
 
   test("s'ouvre sans erreur", async () => {
@@ -52,27 +58,42 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
 
     await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
 
-    assert.deepEqual(page.dialogs, []);
     const recommendation = await page.text('#recommendation');
     assert.match(recommendation, /OUI/);
     assert.match(recommendation, /Temps estimé/);
-    assert.match(recommendation, /Alternative.*Transport en commun/);
+    assert.match(recommendation, /Alternative : .*Transport en commun/);
     assert.match(await page.text('#departure-stations-list'), /Lobau - Hôtel de Ville/);
     assert.match(await page.text('#arrival-stations-list'), /Gare de Lyon - Diderot/);
     assert.equal(await page.isVisible('#alternative-section'), false);
+    assert.deepEqual(page.dialogs, []);
     assert.deepEqual(page.unhandledRequests, []);
     assert.deepEqual(page.errors, []);
     await page.screenshot('trajet-velib');
   });
 
-  test("API Vélib en panne : le dit, au lieu de « aucune station » ou d'un NON", async () => {
+  test('trajet court : NON, et la marche en alternative, sans doublon', async () => {
+    page = await browser.openPopup({ api: fakeApi() });
+
+    await analyze(HOTEL_DE_VILLE, { lat: 48.858, lng: 2.355 });
+
+    assert.match(await page.text('#recommendation'), /NON/);
+    assert.doesNotMatch(await page.text('#recommendation'), /Alternative/, "l'alternative a sa propre section");
+    assert.match(await page.text('#alternative-content'), /Marche/);
+    assert.deepEqual(page.requests, [], 'aucun appel réseau sous 500 m');
+    assert.deepEqual(page.dialogs, []);
+    assert.deepEqual(page.errors, []);
+    await page.screenshot('trajet-court');
+  });
+
+  test("API Vélib en panne : le dit dans la popup, au lieu de « aucune station » ou d'un NON", async () => {
     page = await browser.openPopup({ api: fakeApi({ velibDown: true }) });
 
     await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
 
-    assert.equal(page.dialogs.length, 1);
-    assert.match(page.dialogs[0], /Le service Vélib ne répond pas/);
+    assert.match(await page.text('#error-message'), /Le service Vélib ne répond pas/);
     assert.equal(await page.isVisible('#result-section'), false);
+    assert.deepEqual(page.dialogs, []);
+    await page.screenshot('erreur-api');
   });
 
   test("OpenRouteService trop lent : l'analyse aboutit avec l'estimation", async () => {
@@ -80,21 +101,58 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
 
     await analyze(HOTEL_DE_VILLE, GARE_DE_LYON, 9000);
 
-    assert.deepEqual(page.dialogs, []);
+    assert.equal(await page.isVisible('#error-message'), false);
     assert.match(await page.text('#recommendation'), /OUI|NON/);
   });
 
-  test('trajet court : NON, et la marche en alternative', async () => {
-    page = await browser.openPopup({ api: fakeApi() });
+  test("bouton désactivé pendant l'analyse : un double clic ne lance qu'une analyse", async () => {
+    page = await browser.openPopup({ api: fakeApi({ routeDelay: 500 }) });
+    await fillTrip(HOTEL_DE_VILLE, GARE_DE_LYON);
 
-    await analyze(HOTEL_DE_VILLE, { lat: 48.858, lng: 2.355 });
+    await page.click('#analyze-btn');
+    assert.equal(await page.evaluate(() => document.getElementById('analyze-btn').disabled), true);
+    await page.click('#analyze-btn');
+    await waitForOutcome();
 
+    assert.equal(page.requests.filter(r => r.url.includes('openrouteservice')).length, 1);
+    assert.equal(await page.evaluate(() => document.getElementById('analyze-btn').disabled), false);
+  });
+
+  test('« Voir toutes les stations proches » déplie la liste dans la popup', async () => {
+    const stations = lat => (lat > 48.85
+      ? [
+        velibRecord({ code: 'D1', name: 'Départ 1', bikes: 6, dist: 80 }),
+        velibRecord({ code: 'D2', name: 'Départ vide', bikes: 0, dist: 120 }),
+        velibRecord({ code: 'D3', name: 'Départ 3', bikes: 2, dist: 300 }),
+        velibRecord({ code: 'D4', name: 'Départ 4', bikes: 9, dist: 450 }),
+        velibRecord({ code: 'D5', name: 'Départ 5', bikes: 1, dist: 700 })
+      ]
+      : [velibRecord({ code: 'A1', name: 'Arrivée 1', docks: 12, dist: 90 })]);
+    page = await browser.openPopup({ api: fakeApi({ stations }) });
+    await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+    const departureNames = () => page.evaluate(() =>
+      [...document.querySelectorAll('#departure-stations-list .station-name')].map(item => item.textContent));
+
+    assert.deepEqual(await departureNames(), ['Départ 1', 'Départ 3', 'Départ 4']);
+    await page.click('#toggle-stations');
+    assert.deepEqual(await departureNames(), ['Départ 1', 'Départ vide', 'Départ 3', 'Départ 4', 'Départ 5']);
+    assert.match(await page.text('#departure-stations-list'), /Aucun vélo/);
+    await page.screenshot('toutes-les-stations');
+    await page.click('#toggle-stations');
+    assert.equal((await departureNames()).length, 3);
     assert.deepEqual(page.dialogs, []);
-    assert.match(await page.text('#recommendation'), /NON/);
-    assert.match(await page.text('#alternative-content'), /Marche/);
-    assert.deepEqual(page.requests, [], 'aucun appel réseau sous 500 m');
-    assert.deepEqual(page.errors, []);
-    await page.screenshot('trajet-court');
+  });
+
+  test('« Nouvelle recherche » vide la destination et y place le curseur', async () => {
+    page = await browser.openPopup({ api: fakeApi() });
+    await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    await page.click('#new-search');
+
+    assert.equal(await page.isVisible('#result-section'), false);
+    assert.equal(await page.evaluate(() => document.getElementById('destination').value), '');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'destination');
+    assert.equal(await page.evaluate(() => document.getElementById('current-location').value), asText(HOTEL_DE_VILLE));
   });
 
   test('le bouton de géolocalisation est visible, dans le champ Départ', async () => {
@@ -128,12 +186,25 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     assert.deepEqual(page.errors, []);
   });
 
-  test('destination manquante : demande de la saisir', async () => {
+  test('géolocalisation impossible : message dans la popup', async () => {
+    page = await browser.openPopup({ api: fakeApi(), position: null });
+
+    await page.click('#detect-location');
+    await page.waitFor(() => !document.getElementById('error-message').classList.contains('hidden'), { timeout: 8000 });
+
+    assert.match(await page.text('#error-message'), /Impossible de détecter votre position/);
+    assert.equal(await page.evaluate(() => document.getElementById('detect-location').disabled), false);
+    assert.deepEqual(page.dialogs, []);
+  });
+
+  test('destination manquante : demande de la saisir, dans la popup', async () => {
     page = await browser.openPopup({ api: fakeApi() });
 
     await page.click('#analyze-btn');
 
-    assert.deepEqual(page.dialogs, ['Veuillez entrer une destination']);
+    assert.match(await page.text('#error-message'), /Veuillez entrer une destination/);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'destination');
+    assert.deepEqual(page.dialogs, []);
     assert.deepEqual(page.requests, []);
   });
 });

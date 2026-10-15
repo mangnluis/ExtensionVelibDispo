@@ -38,7 +38,9 @@ Déroulé d'une analyse : coordonnées du départ et de l'arrivée (mémorisées
 
 - Textes d'interface, commentaires et messages de commit en français.
 - JavaScript vanilla, sans framework ni bundler, sans dépendance d'exécution.
-- Toute donnée issue d'une API passe par `escapeHtml` (ou `textContent`) avant d'entrer dans le DOM.
+- Pas d'`innerHTML` : le DOM se construit avec `createElement` + `textContent` (voir `popup.js`), ce qui neutralise toute donnée venue d'une API.
+- Pas d'`alert()` : les erreurs s'affichent dans `#error-message` (`showError`).
+- Espace insécable entre nombre et unité : écrire l'échappement `\u00a0` dans le code, jamais le caractère invisible. Attention, un `\u00a0` passé en paramètre d'outil est décodé en caractère littéral.
 - Indentation 2 espaces, fins de ligne LF.
 
 ## Pièges connus
@@ -82,20 +84,20 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 - [x] **Q1 — Scripts globaux à ordre implicite.** Cinq `<script>` dans `popup.html`, dépendances invisibles (`decision.js` appelle `calculateHaversineDistance` défini dans `api.js`, etc.), rien de testable. *Correctif* : modules ES (`import`/`export`, `<script type="module">`).
 - [x] **Q2 — Code mort.** `decodePolyline` (la géométrie n'est plus demandée), `setStorageData` et `getStorageData`, `CONFIG.DECISION_THRESHOLD`, `CONFIG.VELIB_SPEED_FACTOR` (= 1), `safeGet` (générique pour lire une propriété), la JSDoc orpheline de Haversine dans `geo.js`, et `background.js` (réglages jamais lus) avec la permission `storage` qui ne sert qu'à lui.
 - [x] **Q3 — Haversine au mauvais endroit.** `calculateHaversineDistance` est dans `api.js` : la déplacer dans `geo.js`.
-- [ ] **Q4 — Outils de debug livrés aux utilisateurs.** Le bouton « Vérifier les stations » s'active via un ID d'extension codé en dur, propre au chemin de la machine (`location.hostname === 'localhost'` n'est jamais vrai dans une popup). Le lien « Voir toutes les stations » écrit dans la console puis ouvre une `alert`. Des `console.log` de debug subsistent dans `popup.js` et `decision.js`.
+- [x] **Q4 — Outils de debug livrés aux utilisateurs.** Le bouton « Vérifier les stations » s'active via un ID d'extension codé en dur, propre au chemin de la machine (`location.hostname === 'localhost'` n'est jamais vrai dans une popup). Le lien « Voir toutes les stations » écrit dans la console puis ouvre une `alert`. Des `console.log` de debug subsistent dans `popup.js` et `decision.js`.
 - [x] **Q5 — Bouton « Coordonnées exactes ».** Il est créé en JavaScript (avec des commentaires d'assistant du type « Ajouter cette ligne… ») et écrase le presse-papier sans le demander. Il fait doublon avec « Détecter ma position » depuis que les coordonnées détectées sont mémorisées.
-- [ ] **Q6 — Rendu dupliqué.** Les listes départ et arrivée sont générées par deux blocs copiés-collés, en concaténant du `innerHTML`. *Correctif* : une seule fonction, avec `textContent`.
+- [x] **Q6 — Rendu dupliqué.** Les listes départ et arrivée sont générées par deux blocs copiés-collés, en concaténant du `innerHTML`. *Correctif* : une seule fonction, avec `textContent`.
 - [x] **Q7 — `fetchJson`.** Un signal externe déjà annulé est ignoré, et l'écouteur `abort` n'est jamais retiré. *Correctif* : `AbortSignal.any` + `AbortSignal.timeout`.
 - [x] **Q8 — Clé OpenRouteService codée en dur** au milieu de `calculateRoute`. *Correctif* : la déplacer dans la configuration (voir aussi L3).
 - [ ] **Q9 — CSS.** `.hidden` et `.input-group` sont déclarés deux fois. La police Roboto n'est jamais chargée. La largeur des suggestions (`calc(100% - 32px)`) est fausse. L'indentation est incohérente, et le commentaire résiduel « Ajouter ces styles à la fin du fichier CSS » traîne encore.
 
 ### 🔵 P2 — Expérience utilisateur et accessibilité
 
-- [ ] **U1 — `alert()` pour toutes les erreurs** : les remplacer par un message dans la popup.
+- [x] **U1 — `alert()` pour toutes les erreurs** : les remplacer par un message dans la popup.
 - [ ] **U2 — Clavier.** Entrée ne lance pas l'analyse (pas de `<form>`). Les suggestions ne se parcourent pas au clavier (↑ ↓ Entrée Échap) et n'ont pas de rôle ARIA. Sans `autocomplete="off"`, l'autoremplissage du navigateur recouvre les suggestions.
-- [ ] **U3 — Double clic sur « Analyser ».** Deux analyses tournent en parallèle et la plus lente écrase l'autre. Désactiver le bouton pendant le calcul.
+- [x] **U3 — Double clic sur « Analyser ».** Deux analyses tournent en parallèle et la plus lente écrase l'autre. Désactiver le bouton pendant le calcul.
 - [ ] **U4 — Contrastes insuffisants.** Vert `#4CAF50` sur blanc : 2,8:1 (bouton principal, « OUI », disponibilités). Orange : 2:1. Le minimum WCAG AA est de 4,5:1.
-- [ ] **U5 — « Nouvelle recherche »** se contente de masquer les résultats.
+- [x] **U5 — « Nouvelle recherche »** se contente de masquer les résultats.
 - [ ] **U6 — Estimation non signalée.** Quand OpenRouteService échoue, la durée vélo est une estimation, mais rien ne l'indique (le champ `estimated` n'est jamais lu).
 - [ ] **U7 — Pas de mode sombre** (`prefers-color-scheme`).
 
@@ -104,7 +106,7 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 - [ ] **F1 — Vélos mécaniques et électriques.** L'API fournit `mechanical` et `ebike`, l'interface n'affiche qu'un total.
 - [ ] **F2 — Mémoriser la dernière recherche.** La popup repart de zéro à chaque ouverture.
 - [ ] **F3 — Bouton d'inversion départ ⇄ arrivée** pour le trajet retour.
-- [ ] **F4 — Liste complète des stations dans la popup** (remplace le lien console de Q4).
+- [x] **F4 — Liste complète des stations dans la popup** (remplace le lien console de Q4).
 
 ### ⚡ P2 — Performances
 

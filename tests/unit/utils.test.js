@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { debounce, escapeHtml, formatDistance, formatDuration } from '../../lib/utils.js';
+import { debounce, formatDistance, formatDuration } from '../../lib/utils.js';
 
 // Espace insécable entre le nombre et l'unité : « 16 min » ne se coupe pas en fin de ligne
-const NBSP = ' ';
+const NBSP = '\u00a0';
 
 test('formatDistance : mètres sous 1 km, kilomètres à la française au-delà', () => {
   assert.equal(formatDistance(250.4), `250${NBSP}m`);
@@ -20,15 +20,6 @@ test('formatDuration : arrondi à la minute la plus proche', () => {
 test('formatDuration : heures et minutes sur deux chiffres', () => {
   assert.equal(formatDuration(65 * 60), `1${NBSP}h${NBSP}05`);
   assert.equal(formatDuration(2 * 3600), `2${NBSP}h`);
-});
-
-test('escapeHtml neutralise les caractères HTML', () => {
-  assert.equal(
-    escapeHtml(`<img src=x onerror="alert('x')">&`),
-    '&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;'
-  );
-  assert.equal(escapeHtml(null), '');
-  assert.equal(escapeHtml(42), '42');
 });
 
 test("debounce n'appelle la fonction qu'une fois, avec les derniers arguments", t => {
