@@ -5,7 +5,8 @@
   "description": "Extension Chrome : vaut-il la peine de prendre un Vélib pour ce trajet ?",
   "type": "module",
   "scripts": {
-    "test": "node --test --test-reporter=spec \"tests/unit/*.test.js\""
+    "test": "node --test --test-reporter=spec \"tests/unit/*.test.js\"",
+    "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 \"tests/e2e/*.test.js\""
   },
   "engines": {
     "node": ">=20"

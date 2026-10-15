@@ -7,6 +7,7 @@ Extension Chrome (Manifest V3, JavaScript vanilla, sans build ni dépendance d'e
 - **Lancer l'extension** : `chrome://extensions` → « Mode développeur » → « Charger l'extension non empaquetée » → racine du dépôt. Après chaque modification : ⟳ sur la carte de l'extension, puis rouvrir la popup.
 - **Déboguer la popup** : clic droit dans la popup → « Inspecter ». La popup se ferme dès qu'elle perd le focus, et son état est perdu.
 - **Tests unitaires** : `npm test` (Node ≥ 20, aucune dépendance : `node:test`, `fetch` simulé par `tests/helpers.js` → `stubFetch`).
+- **Tests de bout en bout** : `npm run test:e2e`. Ils ouvrent la vraie popup dans Chrome headless, avec un réseau simulé par `tests/e2e/fake-api.js`, et prennent ~2 s. Chrome est cherché aux emplacements habituels ; sinon définir `CHROME_PATH`. Les captures d'écran de chaque scénario arrivent dans `tests/e2e/artifacts/` (ignoré par git) : les regarder après toute modification visuelle.
 
 ## Architecture
 
@@ -23,6 +24,7 @@ Modules ES : chaque fichier importe explicitement ce qu'il utilise. `lib/` ne to
 | `lib/utils.js` | Formatage distance/durée, `debounce`, `escapeHtml` |
 | `background/background.js` | Écrit à l'installation des réglages que rien ne lit |
 | `tests/unit/*.test.js` | Tests de `lib/`, un fichier par module ; `tests/helpers.js` fournit les réponses d'API simulées |
+| `tests/e2e/` | `browser.js` : client CDP minimal (lance Chrome, charge l'extension, pilote un onglet, sert les requêtes HTTPS) ; `popup.test.js` : scénarios |
 
 Déroulé d'une analyse : coordonnées du départ et de l'arrivée (mémorisées si l'adresse vient d'une suggestion ou de la géolocalisation, sinon géocodées) → en parallèle : stations autour du départ, stations autour de l'arrivée, itinéraire vélo, estimation transports → comparaison des durées → affichage.
 
@@ -109,7 +111,7 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 ### 🧪 Tests et outillage
 
 - [x] **T1 — Tests unitaires** de `lib/` avec `node:test`, sans dépendance, `fetch` simulé : `npm test`.
-- [ ] **T2 — Tests de bout en bout.** La vraie popup dans Chrome headless (protocole CDP par pipe, réseau simulé par le domaine `Fetch`) : `npm run test:e2e`.
+- [x] **T2 — Tests de bout en bout.** La vraie popup dans Chrome headless (protocole CDP par pipe, réseau simulé par le domaine `Fetch`) : `npm run test:e2e`.
 - [x] **T3 — Fichiers de projet** : `package.json` (scripts uniquement), `.gitignore`, `.editorconfig`, `.gitattributes` (LF imposé).
 
 ### 📝 Documentation
