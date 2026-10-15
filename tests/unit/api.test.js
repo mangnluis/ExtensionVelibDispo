@@ -2,7 +2,6 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   AddressNotFoundError,
-  calculateHaversineDistance,
   calculateRoute,
   featureToAddress,
   fetchJson,
@@ -12,20 +11,12 @@ import {
   reverseGeocode,
   searchAddresses
 } from '../../lib/api.js';
+import { BIKE_SPEED, ROUTE_DETOUR_FACTOR } from '../../lib/config.js';
+import { calculateHaversineDistance } from '../../lib/geo.js';
 import { addressFeature, jsonResponse, poiFeature, silenceConsole, stubFetch, velibRecord } from '../helpers.js';
 
 const HOTEL_DE_VILLE = { lat: 48.856614, lng: 2.3522219 };
 const GARE_DE_LYON = { lat: 48.844162, lng: 2.374677 };
-
-describe('calculateHaversineDistance', () => {
-  test('1° de latitude ≈ 111,2 km', () => {
-    assert.ok(Math.abs(calculateHaversineDistance(0, 0, 1, 0) - 111195) < 1);
-  });
-
-  test('distance nulle pour un même point', () => {
-    assert.equal(calculateHaversineDistance(48.85, 2.35, 48.85, 2.35), 0);
-  });
-});
 
 describe('fetchJson', () => {
   test('lève une erreur sur un statut HTTP en échec', async t => {
@@ -237,8 +228,16 @@ describe('calculateRoute', () => {
 
     const route = await calculateRoute(HOTEL_DE_VILLE, GARE_DE_LYON);
 
+    const direct = calculateHaversineDistance(HOTEL_DE_VILLE.lat, HOTEL_DE_VILLE.lng, GARE_DE_LYON.lat, GARE_DE_LYON.lng);
     assert.equal(route.estimated, true);
-    assert.ok(route.distance > 0 && route.duration > 0);
+    assert.equal(route.distance, direct * ROUTE_DETOUR_FACTOR);
+    assert.equal(route.duration, Math.round(route.distance / BIKE_SPEED), "durée calculée sur la distance allongée, à vitesse de Vélib");
+  });
+
+  test('accepte une latitude ou une longitude nulle', async t => {
+    stubFetch(t, [[/openrouteservice/, { routes: [{ summary: { distance: 1200, duration: 300 } }] }]]);
+    const route = await calculateRoute({ lat: 0, lng: 0 }, { lat: 0, lng: 0.01 });
+    assert.equal(route.estimated, false);
   });
 });
 

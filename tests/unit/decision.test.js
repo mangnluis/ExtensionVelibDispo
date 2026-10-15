@@ -1,6 +1,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { getTransportAlternatives } from '../../lib/api.js';
+import { WALKING_SPEED } from '../../lib/config.js';
 import { analyzeVelibJourney, getBestStations, shouldRecommendVelib } from '../../lib/decision.js';
+import { calculateHaversineDistance } from '../../lib/geo.js';
 import { jsonResponse, silenceConsole, stubFetch, velibByPoint, velibRecord } from '../helpers.js';
 
 const HOTEL_DE_VILLE = { lat: 48.856614, lng: 2.3522219 };
@@ -54,24 +57,33 @@ describe('getBestStations', () => {
 describe('analyzeVelibJourney', () => {
   test('rejette des coordonnées invalides', async () => {
     await assert.rejects(analyzeVelibJourney(null, GARE_DE_LYON), /invalides/);
+    await assert.rejects(analyzeVelibJourney({ lat: NaN, lng: 2.35 }, GARE_DE_LYON), /invalides/);
+    await assert.rejects(analyzeVelibJourney({ lat: '48.85', lng: 2.35 }, GARE_DE_LYON), /invalides/);
   });
 
-  test('conseille la marche sous 500 m, sans appel réseau', async t => {
+  test('conseille la marche sous 500 m, sans appel réseau, à la vitesse de marche commune', async t => {
     silenceConsole(t);
     const calls = stubFetch(t, []);
+    const destination = { lat: 48.858, lng: 2.355 };
 
-    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, { lat: 48.858, lng: 2.355 });
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, destination);
 
+    const direct = calculateHaversineDistance(HOTEL_DE_VILLE.lat, HOTEL_DE_VILLE.lng, destination.lat, destination.lng);
     assert.equal(result.recommendation, false);
     assert.match(result.alternative.mode, /Marche/);
+    assert.equal(result.alternative.duration, Math.round(direct / WALKING_SPEED));
     assert.equal(calls.length, 0);
   });
 
-  test('conseille les transports au-delà de 10 km', async t => {
+  test('conseille les transports rapides au-delà de 10 km, avec le même modèle que les autres trajets', async t => {
     silenceConsole(t);
-    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, { lat: 48.7262, lng: 2.3652 }); // Orly
+    const orly = { lat: 48.7262, lng: 2.3652 };
+
+    const result = await analyzeVelibJourney(HOTEL_DE_VILLE, orly);
+
     assert.equal(result.recommendation, false);
-    assert.match(result.alternative.mode, /Transport/);
+    assert.deepEqual(result.alternative, await getTransportAlternatives(HOTEL_DE_VILLE, orly));
+    assert.match(result.alternative.mode, /rapide/);
   });
 
   test('recommande le Vélib quand il est plus rapide', async t => {

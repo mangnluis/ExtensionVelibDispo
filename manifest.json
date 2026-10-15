@@ -5,8 +5,7 @@
   "description": "Décidez rapidement s'il vaut la peine de prendre un Vélib pour votre trajet",
   "minimum_chrome_version": "116",
   "permissions": [
-    "geolocation",
-    "storage"
+    "geolocation"
   ],
   "host_permissions": [
     "https://opendata.paris.fr/*",
@@ -20,9 +19,6 @@
       "48": "assets/icons/icon48.png",
       "128": "assets/icons/icon128.png"
     }
-  },
-  "background": {
-    "service_worker": "background/background.js"
   },
   "icons": {
     "16": "assets/icons/icon16.png",

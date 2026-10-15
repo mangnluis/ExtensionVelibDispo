@@ -15,14 +15,14 @@ Modules ES : chaque fichier importe explicitement ce qu'il utilise. `lib/` ne to
 
 | Fichier | Rôle |
 |---|---|
-| `manifest.json` | MV3, Chrome ≥ 116 (`AbortSignal.any`) ; permissions `geolocation` et `storage` ; accès réseau aux trois API |
+| `manifest.json` | MV3, Chrome ≥ 116 (`AbortSignal.any`) ; permission `geolocation` ; accès réseau aux trois API ; pas de service worker |
 | `popup/popup.html` | Interface ; charge `popup.js` en `<script type="module">` |
 | `popup/popup.js` | Événements, autocomplétion, rendu des résultats |
-| `lib/api.js` | Réseau : stations Vélib, géocodage IGN, itinéraire OpenRouteService, estimation transports en commun ; Haversine |
+| `lib/config.js` | Constantes métier (vitesses, seuils, temps de prise/dépose, rayon de recherche) et clé OpenRouteService |
+| `lib/api.js` | Réseau : stations Vélib, géocodage IGN, itinéraire OpenRouteService, estimation transports en commun |
 | `lib/decision.js` | `analyzeVelibJourney` : agrège les appels et décide OUI/NON |
-| `lib/geo.js` | `getCurrentPosition` (et `decodePolyline`, inutilisé) |
+| `lib/geo.js` | `isValidPosition`, distance de Haversine, `getCurrentPosition` |
 | `lib/utils.js` | Formatage distance/durée, `debounce`, `escapeHtml` |
-| `background/background.js` | Écrit à l'installation des réglages que rien ne lit |
 | `tests/unit/*.test.js` | Tests de `lib/`, un fichier par module ; `tests/helpers.js` fournit les réponses d'API simulées |
 | `tests/e2e/` | `browser.js` : client CDP minimal (lance Chrome, charge l'extension, pilote un onglet, sert les requêtes HTTPS) ; `popup.test.js` : scénarios |
 
@@ -71,22 +71,22 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 ### 🟠 P1 — Justesse des calculs
 
 - [ ] **C1 — Marche plafonnée à 5 min.** `velibTime` ajoute `Math.min(walkDuration, 300)` alors que la station retenue peut être à 1 km (~14 min) : les recommandations sont trop optimistes. Le détail affiché ne correspond pas au total, car il montre la marche non plafonnée et « prise/dépose 2 min » même quand 1 min est comptée (trajets < 2 km).
-- [ ] **C2 — Estimation de secours incohérente.** `calculateRoute` multiplie la distance par 1,2, mais calcule la durée sur la distance à vol d'oiseau à 20 km/h. OpenRouteService mesure environ 16 km/h dans Paris. *Correctif* : durée = distance estimée / 15 km/h.
-- [ ] **C3 — Constantes contradictoires.** La marche est à 1,2 m/s dans `api.js` et à 1,4 m/s dans `decision.js`. L'alternative « trajet trop long » est à 18 km/h au lieu de passer par `getTransportAlternatives` (30 km/h + attente + marche). *Correctif* : toutes les constantes métier dans `lib/config.js`.
+- [x] **C2 — Estimation de secours incohérente.** `calculateRoute` multiplie la distance par 1,2, mais calcule la durée sur la distance à vol d'oiseau à 20 km/h. OpenRouteService mesure environ 16 km/h dans Paris. *Correctif* : durée = distance estimée / 15 km/h.
+- [x] **C3 — Constantes contradictoires.** La marche est à 1,2 m/s dans `api.js` et à 1,4 m/s dans `decision.js`. L'alternative « trajet trop long » est à 18 km/h au lieu de passer par `getTransportAlternatives` (30 km/h + attente + marche). *Correctif* : constantes partagées dans `lib/config.js` ; le modèle transports en commun (vitesses, attente) reste documenté dans `getTransportAlternatives`, seul à s'en servir.
 - [ ] **C4 — Même station au départ et à l'arrivée.** Sur un trajet court, la station la plus proche peut être la même aux deux bouts : l'extension propose de prendre un vélo pour le reposer au même endroit.
 - [ ] **C5 — Formatage.** `formatDuration` : 59 s → « 0min », 65 min → « 1h5 » (à lire « 1 h 05 »). `formatDistance` : point décimal anglais (« 1.5km »).
-- [ ] **C6 — Validation des coordonnées.** Le test `!origin.lat` rejette 0 et accepte des chaînes : utiliser `Number.isFinite`.
+- [x] **C6 — Validation des coordonnées.** Le test `!origin.lat` rejette 0 et accepte des chaînes : utiliser `Number.isFinite`.
 
 ### 🟡 P1 — Qualité du code
 
 - [x] **Q1 — Scripts globaux à ordre implicite.** Cinq `<script>` dans `popup.html`, dépendances invisibles (`decision.js` appelle `calculateHaversineDistance` défini dans `api.js`, etc.), rien de testable. *Correctif* : modules ES (`import`/`export`, `<script type="module">`).
-- [ ] **Q2 — Code mort.** `decodePolyline` (la géométrie n'est plus demandée), `setStorageData` et `getStorageData`, `CONFIG.DECISION_THRESHOLD`, `CONFIG.VELIB_SPEED_FACTOR` (= 1), `safeGet` (générique pour lire une propriété), la JSDoc orpheline de Haversine dans `geo.js`, et `background.js` (réglages jamais lus) avec la permission `storage` qui ne sert qu'à lui.
-- [ ] **Q3 — Haversine au mauvais endroit.** `calculateHaversineDistance` est dans `api.js` : la déplacer dans `geo.js`.
+- [x] **Q2 — Code mort.** `decodePolyline` (la géométrie n'est plus demandée), `setStorageData` et `getStorageData`, `CONFIG.DECISION_THRESHOLD`, `CONFIG.VELIB_SPEED_FACTOR` (= 1), `safeGet` (générique pour lire une propriété), la JSDoc orpheline de Haversine dans `geo.js`, et `background.js` (réglages jamais lus) avec la permission `storage` qui ne sert qu'à lui.
+- [x] **Q3 — Haversine au mauvais endroit.** `calculateHaversineDistance` est dans `api.js` : la déplacer dans `geo.js`.
 - [ ] **Q4 — Outils de debug livrés aux utilisateurs.** Le bouton « Vérifier les stations » s'active via un ID d'extension codé en dur, propre au chemin de la machine (`location.hostname === 'localhost'` n'est jamais vrai dans une popup). Le lien « Voir toutes les stations » écrit dans la console puis ouvre une `alert`. Des `console.log` de debug subsistent dans `popup.js` et `decision.js`.
 - [x] **Q5 — Bouton « Coordonnées exactes ».** Il est créé en JavaScript (avec des commentaires d'assistant du type « Ajouter cette ligne… ») et écrase le presse-papier sans le demander. Il fait doublon avec « Détecter ma position » depuis que les coordonnées détectées sont mémorisées.
 - [ ] **Q6 — Rendu dupliqué.** Les listes départ et arrivée sont générées par deux blocs copiés-collés, en concaténant du `innerHTML`. *Correctif* : une seule fonction, avec `textContent`.
 - [x] **Q7 — `fetchJson`.** Un signal externe déjà annulé est ignoré, et l'écouteur `abort` n'est jamais retiré. *Correctif* : `AbortSignal.any` + `AbortSignal.timeout`.
-- [ ] **Q8 — Clé OpenRouteService codée en dur** au milieu de `calculateRoute`. *Correctif* : la déplacer dans la configuration (voir aussi L3).
+- [x] **Q8 — Clé OpenRouteService codée en dur** au milieu de `calculateRoute`. *Correctif* : la déplacer dans la configuration (voir aussi L3).
 - [ ] **Q9 — CSS.** `.hidden` et `.input-group` sont déclarés deux fois. La police Roboto n'est jamais chargée. La largeur des suggestions (`calc(100% - 32px)`) est fausse. L'indentation est incohérente, et le commentaire résiduel « Ajouter ces styles à la fin du fichier CSS » traîne encore.
 
 ### 🔵 P2 — Expérience utilisateur et accessibilité
