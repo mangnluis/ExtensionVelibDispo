@@ -1,0 +1,13 @@
+{
+  "name": "velib-advisor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Extension Chrome : vaut-il la peine de prendre un Vélib pour ce trajet ?",
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-reporter=spec \"tests/unit/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

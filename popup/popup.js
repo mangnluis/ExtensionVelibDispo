@@ -1,3 +1,13 @@
+import {
+  getCoordinates,
+  getNearbyVelibStations,
+  reverseGeocode,
+  searchAddresses
+} from '../lib/api.js';
+import { analyzeVelibJourney } from '../lib/decision.js';
+import { getCurrentPosition } from '../lib/geo.js';
+import { debounce, escapeHtml } from '../lib/utils.js';
+
 document.addEventListener('DOMContentLoaded', function() {
     // Éléments de l'interface
     const currentLocationInput = document.getElementById('current-location');

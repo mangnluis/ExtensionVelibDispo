@@ -6,20 +6,23 @@ Extension Chrome (Manifest V3, JavaScript vanilla, sans build ni dépendance d'e
 
 - **Lancer l'extension** : `chrome://extensions` → « Mode développeur » → « Charger l'extension non empaquetée » → racine du dépôt. Après chaque modification : ⟳ sur la carte de l'extension, puis rouvrir la popup.
 - **Déboguer la popup** : clic droit dans la popup → « Inspecter ». La popup se ferme dès qu'elle perd le focus, et son état est perdu.
-- **Tests** : aucun pour l'instant (voir T1, T2).
+- **Tests unitaires** : `npm test` (Node ≥ 20, aucune dépendance : `node:test`, `fetch` simulé par `tests/helpers.js` → `stubFetch`).
 
 ## Architecture
+
+Modules ES : chaque fichier importe explicitement ce qu'il utilise. `lib/` ne touche pas au DOM et se teste sous Node.
 
 | Fichier | Rôle |
 |---|---|
 | `manifest.json` | MV3 ; permissions `geolocation` et `storage` ; accès réseau aux trois API |
-| `popup/popup.html` | Interface ; charge `lib/*.js` puis `popup.js` par des `<script>` classiques (tout est global, l'ordre compte) |
+| `popup/popup.html` | Interface ; charge `popup.js` en `<script type="module">` |
 | `popup/popup.js` | Événements, autocomplétion, rendu des résultats |
 | `lib/api.js` | Réseau : stations Vélib, géocodage IGN, itinéraire OpenRouteService, estimation transports en commun ; Haversine |
 | `lib/decision.js` | `analyzeVelibJourney` : agrège les appels et décide OUI/NON |
 | `lib/geo.js` | `getCurrentPosition` (et `decodePolyline`, inutilisé) |
 | `lib/utils.js` | Formatage distance/durée, `debounce`, `escapeHtml` |
 | `background/background.js` | Écrit à l'installation des réglages que rien ne lit |
+| `tests/unit/*.test.js` | Tests de `lib/`, un fichier par module ; `tests/helpers.js` fournit les réponses d'API simulées |
 
 Déroulé d'une analyse : coordonnées du départ et de l'arrivée (mémorisées si l'adresse vient d'une suggestion ou de la géolocalisation, sinon géocodées) → en parallèle : stations autour du départ, stations autour de l'arrivée, itinéraire vélo, estimation transports → comparaison des durées → affichage.
 
@@ -71,7 +74,7 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 
 ### 🟡 P1 — Qualité du code
 
-- [ ] **Q1 — Scripts globaux à ordre implicite.** Cinq `<script>` dans `popup.html`, dépendances invisibles (`decision.js` appelle `calculateHaversineDistance` défini dans `api.js`, etc.), rien de testable. *Correctif* : modules ES (`import`/`export`, `<script type="module">`).
+- [x] **Q1 — Scripts globaux à ordre implicite.** Cinq `<script>` dans `popup.html`, dépendances invisibles (`decision.js` appelle `calculateHaversineDistance` défini dans `api.js`, etc.), rien de testable. *Correctif* : modules ES (`import`/`export`, `<script type="module">`).
 - [ ] **Q2 — Code mort.** `decodePolyline` (la géométrie n'est plus demandée), `setStorageData` et `getStorageData`, `CONFIG.DECISION_THRESHOLD`, `CONFIG.VELIB_SPEED_FACTOR` (= 1), `safeGet` (générique pour lire une propriété), la JSDoc orpheline de Haversine dans `geo.js`, et `background.js` (réglages jamais lus) avec la permission `storage` qui ne sert qu'à lui.
 - [ ] **Q3 — Haversine au mauvais endroit.** `calculateHaversineDistance` est dans `api.js` : la déplacer dans `geo.js`.
 - [ ] **Q4 — Outils de debug livrés aux utilisateurs.** Le bouton « Vérifier les stations » s'active via un ID d'extension codé en dur, propre au chemin de la machine (`location.hostname === 'localhost'` n'est jamais vrai dans une popup). Le lien « Voir toutes les stations » écrit dans la console puis ouvre une `alert`. Des `console.log` de debug subsistent dans `popup.js` et `decision.js`.
@@ -105,9 +108,9 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 
 ### 🧪 Tests et outillage
 
-- [ ] **T1 — Tests unitaires** de `lib/` avec `node:test`, sans dépendance, `fetch` simulé : `npm test`.
+- [x] **T1 — Tests unitaires** de `lib/` avec `node:test`, sans dépendance, `fetch` simulé : `npm test`.
 - [ ] **T2 — Tests de bout en bout.** La vraie popup dans Chrome headless (protocole CDP par pipe, réseau simulé par le domaine `Fetch`) : `npm run test:e2e`.
-- [ ] **T3 — Fichiers de projet** : `package.json` (scripts uniquement), `.gitignore`, `.editorconfig`.
+- [x] **T3 — Fichiers de projet** : `package.json` (scripts uniquement), `.gitignore`, `.editorconfig`, `.gitattributes` (LF imposé).
 
 ### 📝 Documentation
 
