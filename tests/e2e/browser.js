@@ -265,6 +265,41 @@ class Page {
     await this.send('Input.dispatchKeyEvent', { type: 'keyUp', key, ...definition });
   }
 
+  /** Simule la préférence système de thème : 'light' ou 'dark' */
+  emulateColorScheme(scheme) {
+    return this.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
+  }
+
+  /**
+   * Rapport de contraste WCAG entre la couleur du texte d'un élément et le premier fond opaque
+   * de ses ancêtres
+   */
+  contrastRatio(selector) {
+    return this.evaluate(sel => {
+      const channels = color => color.match(/[\d.]+/g).map(Number);
+      const luminance = ([r, g, b]) => {
+        const linear = value => {
+          const v = value / 255;
+          return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+      };
+
+      const element = document.querySelector(sel);
+      let background = [255, 255, 255];
+      for (let node = element; node; node = node.parentElement) {
+        const color = channels(getComputedStyle(node).backgroundColor);
+        if (color.length < 4 || color[3] > 0) {
+          background = color;
+          break;
+        }
+      }
+      const [lighter, darker] = [luminance(channels(getComputedStyle(element).color)), luminance(background)]
+        .sort((a, b) => b - a);
+      return (lighter + 0.05) / (darker + 0.05);
+    }, selector);
+  }
+
   /** Capture la popup entière dans tests/e2e/artifacts/<name>.png */
   async screenshot(name) {
     const height = await this.evaluate(() => Math.ceil(document.documentElement.scrollHeight));

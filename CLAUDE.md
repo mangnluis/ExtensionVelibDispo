@@ -89,17 +89,17 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 - [x] **Q6 — Rendu dupliqué.** Les listes départ et arrivée sont générées par deux blocs copiés-collés, en concaténant du `innerHTML`. *Correctif* : une seule fonction, avec `textContent`.
 - [x] **Q7 — `fetchJson`.** Un signal externe déjà annulé est ignoré, et l'écouteur `abort` n'est jamais retiré. *Correctif* : `AbortSignal.any` + `AbortSignal.timeout`.
 - [x] **Q8 — Clé OpenRouteService codée en dur** au milieu de `calculateRoute`. *Correctif* : la déplacer dans la configuration (voir aussi L3).
-- [ ] **Q9 — CSS.** `.hidden` et `.input-group` sont déclarés deux fois. La police Roboto n'est jamais chargée. La largeur des suggestions (`calc(100% - 32px)`) est fausse. L'indentation est incohérente, et le commentaire résiduel « Ajouter ces styles à la fin du fichier CSS » traîne encore.
+- [x] **Q9 — CSS.** `.hidden` et `.input-group` sont déclarés deux fois. La police Roboto n'est jamais chargée. La largeur des suggestions (`calc(100% - 32px)`) est fausse. L'indentation est incohérente, et le commentaire résiduel « Ajouter ces styles à la fin du fichier CSS » traîne encore.
 
 ### 🔵 P2 — Expérience utilisateur et accessibilité
 
 - [x] **U1 — `alert()` pour toutes les erreurs** : les remplacer par un message dans la popup.
 - [x] **U2 — Clavier.** Entrée ne lance pas l'analyse (pas de `<form>`). Les suggestions ne se parcourent pas au clavier (↑ ↓ Entrée Échap) et n'ont pas de rôle ARIA. Sans `autocomplete="off"`, l'autoremplissage du navigateur recouvre les suggestions.
 - [x] **U3 — Double clic sur « Analyser ».** Deux analyses tournent en parallèle et la plus lente écrase l'autre. Désactiver le bouton pendant le calcul.
-- [ ] **U4 — Contrastes insuffisants.** Vert `#4CAF50` sur blanc : 2,8:1 (bouton principal, « OUI », disponibilités). Orange : 2:1. Le minimum WCAG AA est de 4,5:1.
+- [x] **U4 — Contrastes insuffisants.** Vert `#4CAF50` sur blanc : 2,8:1 (bouton principal, « OUI », disponibilités). Orange : 2:1. Le minimum WCAG AA est de 4,5:1.
 - [x] **U5 — « Nouvelle recherche »** se contente de masquer les résultats.
 - [ ] **U6 — Estimation non signalée.** Quand OpenRouteService échoue, la durée vélo est une estimation, mais rien ne l'indique (le champ `estimated` n'est jamais lu).
-- [ ] **U7 — Pas de mode sombre** (`prefers-color-scheme`).
+- [x] **U7 — Pas de mode sombre** (`prefers-color-scheme`). Fait : jetons de couleur dans `:root`, redéfinis pour le thème sombre.
 
 ### 🟢 P2 — Fonctionnalités
 

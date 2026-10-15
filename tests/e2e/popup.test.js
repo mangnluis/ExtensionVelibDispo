@@ -155,6 +155,44 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     assert.equal(await page.evaluate(() => document.getElementById('current-location').value), asText(HOTEL_DE_VILLE));
   });
 
+  for (const scheme of ['light', 'dark']) {
+    test(`contrastes WCAG AA (≥ 4,5:1) en thème ${scheme === 'light' ? 'clair' : 'sombre'}`, async () => {
+      const stations = lat => (lat > 48.85
+        ? [velibRecord({ code: 'D1', bikes: 2, dist: 80 }), velibRecord({ code: 'D2', bikes: 0, dist: 120 })]
+        : [velibRecord({ code: 'A1', docks: 15, dist: 90 })]);
+      page = await browser.openPopup({ api: fakeApi({ stations }) });
+      await page.emulateColorScheme(scheme);
+      await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+      await page.click('#toggle-stations');
+
+      const selectors = [
+        '#analyze-btn',
+        'label',
+        '#current-location',
+        '.decision-yes',
+        '.decision-details',
+        '.station-name',
+        '.station-details span',
+        '.low-availability',
+        '.good-availability',
+        '.no-availability',
+        '#toggle-stations',
+        '#new-search',
+        'footer p'
+      ];
+      for (const selector of selectors) {
+        const ratio = await page.contrastRatio(selector);
+        assert.ok(ratio >= 4.5, `${selector} : ${ratio.toFixed(2)}:1`);
+      }
+      await page.screenshot(`theme-${scheme}`);
+
+      await page.click('#new-search');
+      await page.click('#analyze-btn');
+      const errorRatio = await page.contrastRatio('#error-message');
+      assert.ok(errorRatio >= 4.5, `#error-message : ${errorRatio.toFixed(2)}:1`);
+    });
+  }
+
   test('le bouton de géolocalisation est visible, dans le champ Départ', async () => {
     page = await browser.openPopup({ api: fakeApi() });
 
@@ -244,6 +282,17 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
         optionRoles: ['option', 'option']
       });
       await page.screenshot('suggestions');
+    });
+
+    test('la liste a exactement la largeur du champ', async () => {
+      await typeDestination('bastille');
+
+      const widths = await page.evaluate(() => ({
+        input: document.getElementById('destination').getBoundingClientRect().width,
+        list: document.getElementById('destination-suggestions').getBoundingClientRect().width
+      }));
+
+      assert.equal(widths.list, widths.input);
     });
 
     test("↓ puis Entrée choisit une suggestion sans lancer l'analyse, qui utilise ensuite ses coordonnées", async () => {
