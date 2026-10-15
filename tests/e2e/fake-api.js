@@ -20,6 +20,7 @@ export function defaultStations(lat) {
  * @param {Object[]} [options.addresses] - features renvoyées par la recherche d'adresses
  * @param {string} [options.reverseLabel] - adresse renvoyée par le géocodage inverse
  * @param {Object|null} [options.route] - résumé OpenRouteService ; null → erreur 500
+ * @param {number} [options.routeDelay] - délai de réponse d'OpenRouteService, en ms
  * @param {boolean} [options.velibDown] - l'API Vélib répond 503
  * @returns {Function} gestionnaire de requêtes pour openPopup({ api })
  */
@@ -28,6 +29,7 @@ export function fakeApi({
   addresses = [],
   reverseLabel = "1 Place de l'Hôtel de Ville 75004 Paris",
   route = { distance: 2462, duration: 537 },
+  routeDelay = 0,
   velibDown = false
 } = {}) {
   return ({ url }) => {
@@ -52,7 +54,7 @@ export function fakeApi({
     }
 
     if (hostname === 'api.openrouteservice.org') {
-      return route ? { body: { routes: [{ summary: route }] } } : { status: 500, body: {} };
+      return route ? { body: { routes: [{ summary: route }] }, delay: routeDelay } : { status: 500, body: {} };
     }
 
     return undefined;

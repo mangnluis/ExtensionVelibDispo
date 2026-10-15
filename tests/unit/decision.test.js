@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeVelibJourney, getBestStations, shouldRecommendVelib } from '../../lib/decision.js';
-import { silenceConsole, stubFetch, velibByPoint, velibRecord } from '../helpers.js';
+import { jsonResponse, silenceConsole, stubFetch, velibByPoint, velibRecord } from '../helpers.js';
 
 const HOTEL_DE_VILLE = { lat: 48.856614, lng: 2.3522219 };
 const GARE_DE_LYON = { lat: 48.844162, lng: 2.374677 };
@@ -115,6 +115,15 @@ describe('analyzeVelibJourney', () => {
     const result = await analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON);
     assert.equal(result.recommendation, false);
     assert.match(result.reason, /Aucune station Vélib disponible près de votre point de départ/);
+  });
+
+  test("échoue clairement si l'API Vélib est en panne", async t => {
+    silenceConsole(t);
+    stubFetch(t, [
+      [/opendata\.paris\.fr/, () => jsonResponse({}, 503)],
+      [/openrouteservice/, { routes: [{ summary: { distance: 2462, duration: 537 } }] }]
+    ]);
+    await assert.rejects(analyzeVelibJourney(HOTEL_DE_VILLE, GARE_DE_LYON), /Le service Vélib ne répond pas/);
   });
 
   test('non sans station près du départ', async t => {

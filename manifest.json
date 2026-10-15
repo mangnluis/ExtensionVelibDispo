@@ -1,32 +1,32 @@
 {
-    "manifest_version": 3,
-    "name": "Vélib Advisor",
-    "version": "1.0",
-    "description": "Décidez rapidement s'il vaut la peine de prendre un Vélib pour votre trajet",
-    "permissions": [
-      "geolocation",
-      "storage"
-    ],
-    "host_permissions": [
-      "https://opendata.paris.fr/*",
-      "https://data.geopf.fr/*",
-      "https://api.openrouteservice.org/*"
-    ],
-    "action": {
-      "default_popup": "popup/popup.html",
-      "default_icon": {
-        "16": "assets/icons/icon16.png",
-        "48": "assets/icons/icon48.png",
-        "128": "assets/icons/icon128.png"
-      }
-    },
-    "background": {
-      "service_worker": "background/background.js"
-    },
-    "icons": {
+  "manifest_version": 3,
+  "name": "Vélib Advisor",
+  "version": "1.0",
+  "description": "Décidez rapidement s'il vaut la peine de prendre un Vélib pour votre trajet",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "geolocation",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://opendata.paris.fr/*",
+    "https://data.geopf.fr/*",
+    "https://api.openrouteservice.org/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
       "16": "assets/icons/icon16.png",
       "48": "assets/icons/icon48.png",
       "128": "assets/icons/icon128.png"
     }
+  },
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
   }
-  
+}

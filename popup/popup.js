@@ -1,4 +1,5 @@
 import {
+  AddressNotFoundError,
   getCoordinates,
   getNearbyVelibStations,
   reverseGeocode,
@@ -89,16 +90,17 @@ document.addEventListener('DOMContentLoaded', function() {
       loadingSection.classList.remove('hidden');
       resultSection.classList.add('hidden');
       
+      // Une adresse introuvable est à préciser ; une panne garde son propre message
+      const explainNotFound = message => error => {
+        throw error instanceof AddressNotFoundError ? new Error(message) : error;
+      };
+
       // Réutiliser les coordonnées connues (suggestion choisie, géolocalisation) sinon géocoder
       Promise.all([
-        resolveInputCoords(currentLocationInput, 'Ma position').catch(err => {
-          console.error("Erreur avec l'adresse de départ:", err);
-          throw new Error("L'adresse de départ n'a pas pu être localisée. Veuillez la préciser.");
-        }),
-        resolveInputCoords(destinationInput).catch(err => {
-          console.error("Erreur avec l'adresse de destination:", err);
-          throw new Error("L'adresse de destination n'a pas pu être localisée. Veuillez la préciser.");
-        })
+        resolveInputCoords(currentLocationInput, 'Ma position')
+          .catch(explainNotFound("L'adresse de départ n'a pas pu être localisée. Veuillez la préciser.")),
+        resolveInputCoords(destinationInput)
+          .catch(explainNotFound("L'adresse de destination n'a pas pu être localisée. Veuillez la préciser."))
       ])
         .then(([originCoords, destCoords]) => {
           // Vérifier si les coordonnées sont valides

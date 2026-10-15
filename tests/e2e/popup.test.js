@@ -24,11 +24,11 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
   });
 
   /** Lance l'analyse et attend le résultat (ou une alerte) */
-  async function analyze(origin, destination) {
+  async function analyze(origin, destination, timeout = 5000) {
     await page.fill('#current-location', asText(origin));
     await page.fill('#destination', asText(destination));
     await page.click('#analyze-btn');
-    const deadline = Date.now() + 5000;
+    const deadline = Date.now() + timeout;
     while (!page.dialogs.length && !(await page.isVisible('#result-section'))) {
       if (Date.now() > deadline) {
         throw new Error("Pas de résultat d'analyse");
@@ -63,6 +63,25 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     assert.deepEqual(page.unhandledRequests, []);
     assert.deepEqual(page.errors, []);
     await page.screenshot('trajet-velib');
+  });
+
+  test("API Vélib en panne : le dit, au lieu de « aucune station » ou d'un NON", async () => {
+    page = await browser.openPopup({ api: fakeApi({ velibDown: true }) });
+
+    await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    assert.equal(page.dialogs.length, 1);
+    assert.match(page.dialogs[0], /Le service Vélib ne répond pas/);
+    assert.equal(await page.isVisible('#result-section'), false);
+  });
+
+  test("OpenRouteService trop lent : l'analyse aboutit avec l'estimation", async () => {
+    page = await browser.openPopup({ api: fakeApi({ routeDelay: 6000 }) });
+
+    await analyze(HOTEL_DE_VILLE, GARE_DE_LYON, 9000);
+
+    assert.deepEqual(page.dialogs, []);
+    assert.match(await page.text('#recommendation'), /OUI|NON/);
   });
 
   test('trajet court : NON, et la marche en alternative', async () => {

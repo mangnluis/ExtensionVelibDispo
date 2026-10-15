@@ -149,7 +149,8 @@ class Page {
     if (reply.delay) {
       await new Promise(done => setTimeout(done, reply.delay));
     }
-    await this.send('Fetch.fulfillRequest', {
+    // Après un délai, la page a pu abandonner la requête : Chrome refuse alors la réponse
+    const fulfilled = this.send('Fetch.fulfillRequest', {
       requestId,
       responseCode: reply.status ?? 200,
       responseHeaders: [
@@ -158,6 +159,7 @@ class Page {
       ],
       body: Buffer.from(JSON.stringify(reply.body ?? {})).toString('base64')
     });
+    await (reply.delay ? fulfilled.catch(() => {}) : fulfilled);
   }
 
   waitForEvent(eventName, timeout = COMMAND_TIMEOUT) {

@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  AddressNotFoundError,
   calculateHaversineDistance,
   calculateRoute,
   featureToAddress,
@@ -33,10 +34,20 @@ describe('fetchJson', () => {
   });
 
   test('abandonne la requête après le délai', async t => {
+    // Sous Node, le minuteur d'AbortSignal.timeout ne retient pas le processus : on le garde éveillé
+    const keepAlive = setInterval(() => {}, 1000);
+    t.after(() => clearInterval(keepAlive));
     stubFetch(t, [[/example/, (url, { signal }) => new Promise((resolve, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason));
     })]]);
-    await assert.rejects(fetchJson('https://example.test/', {}, 20));
+    await assert.rejects(fetchJson('https://example.test/', {}, 20), { name: 'TimeoutError' });
+  });
+
+  test('respecte un signal déjà annulé', async t => {
+    stubFetch(t, [[/example/, { ok: true }]]);
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(fetchJson('https://example.test/', { signal: controller.signal }), { name: 'AbortError' });
   });
 });
 
@@ -98,6 +109,11 @@ describe('getNearbyVelibStations', () => {
   test('rejette une position invalide', async () => {
     await assert.rejects(getNearbyVelibStations({ lat: '48.85', lng: 2.35 }), /Position invalide/);
   });
+
+  test("signale une panne de l'API au lieu de répondre « aucune station »", async t => {
+    stubFetch(t, [[/opendata\.paris\.fr/, () => jsonResponse({}, 503)]]);
+    await assert.rejects(getNearbyVelibStations(HOTEL_DE_VILLE, 1500), /Le service Vélib ne répond pas/);
+  });
 });
 
 describe('getCoordinates', () => {
@@ -155,7 +171,14 @@ describe('getCoordinates', () => {
 
   test('signale une adresse introuvable', async t => {
     stubFetch(t, [[/geocodage\/search/, { features: [] }]]);
-    await assert.rejects(getCoordinates('zzzz introuvable'), /Adresse introuvable/);
+    await assert.rejects(getCoordinates('zzzz introuvable'), AddressNotFoundError);
+  });
+
+  test("distingue une panne du géocodeur d'une adresse introuvable", async t => {
+    stubFetch(t, [[/geocodage\/search/, () => jsonResponse({}, 502)]]);
+    const error = await getCoordinates('rue sans reponse').catch(e => e);
+    assert.ok(!(error instanceof AddressNotFoundError));
+    assert.match(error.message, /recherche d'adresses ne répond pas/);
   });
 
   test('refuse une adresse hors de Paris et de la petite couronne', async t => {

@@ -15,7 +15,7 @@ Modules ES : chaque fichier importe explicitement ce qu'il utilise. `lib/` ne to
 
 | Fichier | Rôle |
 |---|---|
-| `manifest.json` | MV3 ; permissions `geolocation` et `storage` ; accès réseau aux trois API |
+| `manifest.json` | MV3, Chrome ≥ 116 (`AbortSignal.any`) ; permissions `geolocation` et `storage` ; accès réseau aux trois API |
 | `popup/popup.html` | Interface ; charge `popup.js` en `<script type="module">` |
 | `popup/popup.js` | Événements, autocomplétion, rendu des résultats |
 | `lib/api.js` | Réseau : stations Vélib, géocodage IGN, itinéraire OpenRouteService, estimation transports en commun ; Haversine |
@@ -44,6 +44,8 @@ Déroulé d'une analyse : coordonnées du départ et de l'arrivée (mémorisées
 ## Pièges connus
 
 - Géocodage (`searchParisArea`) : la saisie brute passe d'abord, car ajouter « Paris » dégrade la recherche des lieux (« République » → 4 km d'écart). Le suffixe ne sert qu'en repli, quand rien n'est trouvé en petite couronne (« Gare de Lyon » sans ville donne d'abord Lyon). À score égal, le lieu dont le nom est exactement la saisie passe en tête.
+- Erreurs réseau : `fetchJson` limite chaque requête à 5 s. Les services renvoient un message affichable (« Le service Vélib ne répond pas… »), sauf OpenRouteService qui retombe sur une estimation. Une adresse introuvable lève `AddressNotFoundError`, à distinguer d'une panne.
+- Sous Node, le minuteur d'`AbortSignal.timeout` ne retient pas le processus : un test qui n'attend que lui doit garder la boucle d'événements occupée (voir `fetchJson` dans `api.test.js`).
 - Pour tester le géocodeur à la main sous Windows, passer par Node (`fetch`), pas par `curl` dans Git Bash : il transmet les accents dans le mauvais encodage (« Opéra » ne trouve alors rien).
 - Les distances aux stations sont à vol d'oiseau ; la vitesse de marche de 1,2 m/s intègre les détours.
 - Chrome (version de marque) ignore `--load-extension` depuis la v137. Pour piloter l'extension en headless : `--remote-debugging-pipe --enable-unsafe-extension-debugging`, puis la commande CDP `Extensions.loadUnpacked`.
@@ -62,8 +64,8 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 - [x] **B2 — Stations hors service proposées.** `getNearbyVelibStations` ignore `is_installed`, `is_renting` et `is_returning`. Le 15/10/2026, 18 stations étaient hors service, dont 2 annonçaient encore des vélos (données figées depuis 2025). *Correctif* : demander ces champs, ne garder que les stations qui louent (départ) ou qui acceptent les retours (arrivée). Les données périmées ne concernent que ces stations : aucun filtre sur `duedate` n'est nécessaire.
 - [x] **B3 — Géocodage faux sur les lieux les plus courants.** Seul l'index `address` est interrogé, donc les gares et stations de métro deviennent des rues homonymes : « Gare du Nord » → « Port de la Gare 75013 » (**5,4 km d'écart**), « Châtelet » → « Passage Châtelet 75017 » (4,6 km), « Gare de Lyon » → « Rue de Lyon » (690 m). Pire : « Stade de France » → 610 km, « Mairie de Montreuil » → 272 km. *Correctif* : `index=address,poi`, saisie brute avant l'ajout de « Paris », nom exact en tête, rien hors de Paris et de la petite couronne. Sur 22 lieux parisiens, 21 tombent à moins de 300 m (contre 10 avant).
 - [x] **B4 — Bouton « Détecter ma position » invisible.** Son icône `assets/icons/location.svg` n'existe pas dans le dépôt, et le bouton est en `position: absolute` sans `top`. Seul « 📍 Coordonnées exactes » est visible. *Correctif* : icône SVG versionnée, bouton placé dans le champ Départ.
-- [ ] **B5 — Une panne réseau se fait passer pour « aucune station ».** `getNearbyVelibStations` avale l'erreur et renvoie `[]` : API Vélib indisponible ou délai dépassé → « Aucune station Vélib disponible près de votre point de départ ». *Correctif* : propager l'erreur, afficher « données Vélib indisponibles, réessayez ».
-- [ ] **B6 — Deux timeouts de 5 s en concurrence.** `decision.js` → `withTimeout(…, 5000)` enveloppe des appels déjà limités à 5 s par `fetchJson`. Un OpenRouteService lent peut faire échouer toute l'analyse au lieu de basculer sur l'estimation prévue. `withTimeout` enveloppe aussi `getTransportAlternatives`, qui n'est même pas asynchrone. *Correctif* : un seul niveau de timeout, dans `fetchJson`.
+- [x] **B5 — Une panne réseau se fait passer pour « aucune station ».** `getNearbyVelibStations` avale l'erreur et renvoie `[]` : API Vélib indisponible ou délai dépassé → « Aucune station Vélib disponible près de votre point de départ ». *Correctif* : propager l'erreur, afficher « données Vélib indisponibles, réessayez ».
+- [x] **B6 — Deux timeouts de 5 s en concurrence.** `decision.js` → `withTimeout(…, 5000)` enveloppe des appels déjà limités à 5 s par `fetchJson`. Un OpenRouteService lent peut faire échouer toute l'analyse au lieu de basculer sur l'estimation prévue. `withTimeout` enveloppe aussi `getTransportAlternatives`, qui n'est même pas asynchrone. *Correctif* : un seul niveau de timeout, dans `fetchJson`.
 - [x] **B7 — CSS invalide** `font-size: C;` sur les champs texte (`popup.css`).
 
 ### 🟠 P1 — Justesse des calculs
@@ -83,7 +85,7 @@ Méthode : un élément (ou un petit groupe cohérent) par itération. Écrire d
 - [ ] **Q4 — Outils de debug livrés aux utilisateurs.** Le bouton « Vérifier les stations » s'active via un ID d'extension codé en dur, propre au chemin de la machine (`location.hostname === 'localhost'` n'est jamais vrai dans une popup). Le lien « Voir toutes les stations » écrit dans la console puis ouvre une `alert`. Des `console.log` de debug subsistent dans `popup.js` et `decision.js`.
 - [x] **Q5 — Bouton « Coordonnées exactes ».** Il est créé en JavaScript (avec des commentaires d'assistant du type « Ajouter cette ligne… ») et écrase le presse-papier sans le demander. Il fait doublon avec « Détecter ma position » depuis que les coordonnées détectées sont mémorisées.
 - [ ] **Q6 — Rendu dupliqué.** Les listes départ et arrivée sont générées par deux blocs copiés-collés, en concaténant du `innerHTML`. *Correctif* : une seule fonction, avec `textContent`.
-- [ ] **Q7 — `fetchJson`.** Un signal externe déjà annulé est ignoré, et l'écouteur `abort` n'est jamais retiré. *Correctif* : `AbortSignal.any` + `AbortSignal.timeout`.
+- [x] **Q7 — `fetchJson`.** Un signal externe déjà annulé est ignoré, et l'écouteur `abort` n'est jamais retiré. *Correctif* : `AbortSignal.any` + `AbortSignal.timeout`.
 - [ ] **Q8 — Clé OpenRouteService codée en dur** au milieu de `calculateRoute`. *Correctif* : la déplacer dans la configuration (voir aussi L3).
 - [ ] **Q9 — CSS.** `.hidden` et `.input-group` sont déclarés deux fois. La police Roboto n'est jamais chargée. La largeur des suggestions (`calc(100% - 32px)`) est fausse. L'indentation est incohérente, et le commentaire résiduel « Ajouter ces styles à la fin du fichier CSS » traîne encore.
 

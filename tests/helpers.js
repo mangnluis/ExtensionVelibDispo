@@ -27,6 +27,10 @@ export function stubFetch(t, routes) {
   t.mock.method(globalThis, 'fetch', async (url, options = {}) => {
     const href = String(url);
     calls.push({ url: href, options });
+    // Comme le vrai fetch : un signal déjà annulé fait échouer la requête
+    if (options.signal?.aborted) {
+      throw options.signal.reason;
+    }
     const route = routes.find(([pattern]) => pattern.test(href));
     if (!route) {
       throw new TypeError(`Requête non simulée : ${href}`);
