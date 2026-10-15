@@ -1,7 +1,7 @@
 import { after, afterEach, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { findChrome, launchBrowser } from './browser.js';
-import { fakeApi, HOTEL_DE_VILLE } from './fake-api.js';
+import { fakeApi, GARE_DE_LYON, HOTEL_DE_VILLE } from './fake-api.js';
 
 const chromePath = findChrome();
 const asText = ({ lat, lng }) => `${lat}, ${lng}`;
@@ -45,6 +45,24 @@ describe('popup dans Chrome headless', { skip: !chromePath && 'Chrome introuvabl
     assert.equal(await page.isVisible('#result-section'), false);
     assert.deepEqual(page.errors, []);
     await page.screenshot('accueil');
+  });
+
+  test("Vélib plus rapide : OUI, avec les stations et l'alternative", async () => {
+    page = await browser.openPopup({ api: fakeApi() });
+
+    await analyze(HOTEL_DE_VILLE, GARE_DE_LYON);
+
+    assert.deepEqual(page.dialogs, []);
+    const recommendation = await page.text('#recommendation');
+    assert.match(recommendation, /OUI/);
+    assert.match(recommendation, /Temps estimé/);
+    assert.match(recommendation, /Alternative.*Transport en commun/);
+    assert.match(await page.text('#departure-stations-list'), /Lobau - Hôtel de Ville/);
+    assert.match(await page.text('#arrival-stations-list'), /Gare de Lyon - Diderot/);
+    assert.equal(await page.isVisible('#alternative-section'), false);
+    assert.deepEqual(page.unhandledRequests, []);
+    assert.deepEqual(page.errors, []);
+    await page.screenshot('trajet-velib');
   });
 
   test('trajet court : NON, et la marche en alternative', async () => {

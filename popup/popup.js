@@ -200,8 +200,8 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="result-yes">
             <p class="decision-text decision-yes">OUI, prenez un Vélib</p>
             <p class="decision-details">
-              Temps estimé: ${result.duration.velibText}<br>
-              Alternative: ${result.duration.alternativeText}
+              ${escapeHtml(result.reason)}<br>
+              ${result.alternative ? 'Alternative: ' + escapeHtml(result.alternative.mode) + ' (' + result.alternative.durationText + ')' : ''}
             </p>
           </div>
         `;
