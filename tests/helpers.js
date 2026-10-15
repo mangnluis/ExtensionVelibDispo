@@ -70,11 +70,20 @@ export function velibRecord({ code, name = `Station ${code}`, bikes = 5, docks =
   };
 }
 
-/** Feature « adresse » du géocodeur IGN */
-export function addressFeature({ label, lat, lng, postcode = '75001', type = 'housenumber' }) {
+/** Feature « adresse » du géocodeur IGN ; name = libellé sans code postal ni ville */
+export function addressFeature({ label, lat, lng, postcode = '75001', name = label.replace(/ \d{5} .*$/, '') }) {
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [lng, lat] },
-    properties: { label, postcode, type }
+    properties: { label, name, postcode, type: 'street', _type: 'address' }
+  };
+}
+
+/** Feature « POI » du géocodeur IGN : pas de label, name/postcode/city/category en tableaux */
+export function poiFeature({ name, lat, lng, postcode = '75001', city = ['Paris 1er Arrondissement', 'Paris'], category = 'station de métro' }) {
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [lng, lat] },
+    properties: { name: [name], toponym: name, postcode: [postcode], city, category: [category, 'transport'], _type: 'poi' }
   };
 }

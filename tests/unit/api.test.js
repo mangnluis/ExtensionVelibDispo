@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calculateHaversineDistance,
   calculateRoute,
+  featureToAddress,
   fetchJson,
   getCoordinates,
   getNearbyVelibStations,
@@ -10,7 +11,7 @@ import {
   reverseGeocode,
   searchAddresses
 } from '../../lib/api.js';
-import { addressFeature, jsonResponse, silenceConsole, stubFetch, velibRecord } from '../helpers.js';
+import { addressFeature, jsonResponse, poiFeature, silenceConsole, stubFetch, velibRecord } from '../helpers.js';
 
 const HOTEL_DE_VILLE = { lat: 48.856614, lng: 2.3522219 };
 const GARE_DE_LYON = { lat: 48.844162, lng: 2.374677 };
@@ -106,12 +107,40 @@ describe('getCoordinates', () => {
     assert.equal(calls.length, 0);
   });
 
-  test("précise « Paris » quand aucune ville n'est donnée", async t => {
+  test('cherche aussi parmi les lieux (gares, métro, monuments)', async t => {
     const calls = stubFetch(t, [[/geocodage\/search/, {
-      features: [addressFeature({ label: 'Rue de Lyon 75012 Paris', lat: 48.8498, lng: 2.3708, postcode: '75012' })]
+      features: [poiFeature({ name: 'Gare du Nord', lat: 48.8797, lng: 2.3549, postcode: '75010' })]
     }]]);
-    await getCoordinates('Gare de Lyon');
-    assert.equal(new URL(calls[0].url).searchParams.get('q'), 'Gare de Lyon Paris');
+
+    assert.deepEqual(await getCoordinates('Gare du Nord'), { lat: 48.8797, lng: 2.3549 });
+
+    const params = new URL(calls[0].url).searchParams;
+    assert.equal(params.get('index'), 'address,poi');
+    assert.equal(params.get('q'), 'Gare du Nord', "la requête brute passe d'abord");
+  });
+
+  test("précise « Paris » quand rien n'est trouvé en petite couronne", async t => {
+    const calls = stubFetch(t, [[/geocodage\/search/, url => {
+      const query = new URL(url).searchParams.get('q');
+      return {
+        features: query.endsWith('Paris')
+          ? [poiFeature({ name: 'Gare de Lyon', lat: 48.8457, lng: 2.373, postcode: '75012' })]
+          : [addressFeature({ label: 'Gare de Lyon 69003 Lyon', lat: 45.76, lng: 4.86, postcode: '69003' })]
+      };
+    }]]);
+
+    assert.deepEqual(await getCoordinates('Gare de Lyon'), { lat: 48.8457, lng: 2.373 });
+    assert.deepEqual(calls.map(call => new URL(call.url).searchParams.get('q')), ['Gare de Lyon', 'Gare de Lyon Paris']);
+  });
+
+  test('préfère le lieu dont le nom est exactement la saisie', async t => {
+    stubFetch(t, [[/geocodage\/search/, {
+      features: [
+        poiFeature({ name: 'Hôtel du Châtelet', lat: 48.8577, lng: 2.3184, postcode: '75007', category: 'quartier' }),
+        poiFeature({ name: 'Châtelet', lat: 48.8577, lng: 2.3474, postcode: '75001' })
+      ]
+    }]]);
+    assert.deepEqual(await getCoordinates('chatelet'), { lat: 48.8577, lng: 2.3474 });
   });
 
   test('privilégie un résultat à Paris ou en petite couronne', async t => {
@@ -127,6 +156,37 @@ describe('getCoordinates', () => {
   test('signale une adresse introuvable', async t => {
     stubFetch(t, [[/geocodage\/search/, { features: [] }]]);
     await assert.rejects(getCoordinates('zzzz introuvable'), /Adresse introuvable/);
+  });
+
+  test('refuse une adresse hors de Paris et de la petite couronne', async t => {
+    stubFetch(t, [[/geocodage\/search/, {
+      features: [addressFeature({ label: 'Place du Marché 78000 Versailles', lat: 48.8069, lng: 2.1315, postcode: '78000' })]
+    }]]);
+    await assert.rejects(getCoordinates('place du marche, versailles'), /Adresse introuvable/);
+  });
+});
+
+describe('featureToAddress', () => {
+  test("reprend le libellé d'une adresse", () => {
+    const feature = addressFeature({ label: '10 Rue de Rivoli 75004 Paris', lat: 48.8555, lng: 2.3601, postcode: '75004' });
+    assert.deepEqual(featureToAddress(feature), {
+      display_name: '10 Rue de Rivoli 75004 Paris',
+      name: '10 Rue de Rivoli',
+      lat: 48.8555,
+      lng: 2.3601,
+      postcode: '75004'
+    });
+  });
+
+  test("compose un libellé pour un lieu, qui n'en a pas", () => {
+    const feature = poiFeature({ name: 'Gare de Lyon', lat: 48.8457, lng: 2.373, postcode: '75012', city: ['Paris 12e Arrondissement', 'Paris'] });
+    assert.deepEqual(featureToAddress(feature), {
+      display_name: 'Gare de Lyon (station de métro) 75012 Paris',
+      name: 'Gare de Lyon',
+      lat: 48.8457,
+      lng: 2.373,
+      postcode: '75012'
+    });
   });
 });
 
@@ -212,5 +272,21 @@ describe('searchAddresses', () => {
 
     assert.equal(calls.length, 2);
     assert.equal(results[0].display_name, 'Rue de Lyon 75012 Paris');
+  });
+
+  test('propose les lieux, le nom exact en tête', async t => {
+    stubFetch(t, [[/geocodage\/search/, {
+      features: [
+        poiFeature({ name: 'Parking Bastille', lat: 48.852, lng: 2.369, postcode: '75012', category: 'parking' }),
+        poiFeature({ name: 'Bastille', lat: 48.8531, lng: 2.3691, postcode: '75004' })
+      ]
+    }]]);
+
+    const results = await searchAddresses('bastille');
+
+    assert.deepEqual(results.map(r => r.display_name), [
+      'Bastille (station de métro) 75004 Paris',
+      'Parking Bastille (parking) 75012 Paris'
+    ]);
   });
 });
